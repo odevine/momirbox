@@ -44,23 +44,19 @@ const (
 )
 
 const (
-	PinBackBtn    = 23
-	PinEncoderA   = 17
-	PinEncoderB   = 27
-	PinEncoderBtn = 22
-	// Other navigation buttons will be added here
-	PinDisplayDC  = 24
-	PinDisplayRST = 25
+	PinBackBtn    = 21
+	PinEncoderA   = 20
+	PinEncoderB   = 16
+	PinEncoderCen = 5
+	PinEncoderUp  = 19
+	PinEncoderDwn = 6
+	PinEncodeLft  = 26
+	PinEncoderRgt = 13
+	PinDisplayDC  = 9
+	PinDisplayRST = 27
 )
 
 const (
-	SplashDuration = 4 * time.Second
+	SplashDuration = 2 * time.Second
 	FrameDelay     = 16 * time.Millisecond // targets 60 FPS
-	
-	HeaderHeight   = 12
-	FontSize       = 9
-	IconHeight     = 24
-	IconWidth      = 24
-	ItemSpacing    = 40
-	MenuYPos       = 25
 )

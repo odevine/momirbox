@@ -15,11 +15,6 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-const (
-	ScreenWidth  = 128
-	ScreenHeight = 64
-)
-
 var (
 	ColorBlack = color.RGBA{0, 0, 0, 255}
 	ColorWhite = color.RGBA{255, 255, 255, 255}
@@ -55,7 +50,7 @@ func (app *App) fallbackSplash(img *image.RGBA) {
 }
 
 func (app *App) renderSplash() {
-	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
+	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 	splashPath := filepath.Join(config.AssetsDir, "momir_splash.png")
@@ -92,7 +87,7 @@ func (app *App) renderVerticalList(img *image.RGBA) {
 		yPos := Theme.VerticalStartY + (i * Theme.VerticalRowHeight)
 		
 		if itemIndex == app.currentIndex {
-			bgRect := image.Rect(0, yPos-Theme.VerticalHighlightTop, ScreenWidth, yPos+Theme.VerticalHighlightBot)
+			bgRect := image.Rect(0, yPos-Theme.VerticalHighlightTop, config.ScreenWidth, yPos+Theme.VerticalHighlightBot)
 			draw.Draw(img, bgRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 			
 			valStr := item.GetValue()
@@ -120,14 +115,14 @@ func (app *App) renderVerticalList(img *image.RGBA) {
 }
 
 func (app *App) renderHorizontalCarousel(img *image.RGBA) {
-	baseX := (ScreenWidth / 2) - (Theme.CarouselIconSize / 2)
+	baseX := (config.ScreenWidth / 2) - (Theme.CarouselIconSize / 2)
 
 	for i, item := range app.currentMenu.Items {
 		offset := float64(i) - app.visualIndex
 		xPosFloat := float64(baseX) + (offset * float64(Theme.CarouselItemSpacing))
 		xPos := int(xPosFloat)
 
-		if xPos > -Theme.CarouselIconSize && xPos < ScreenWidth {
+		if xPos > -Theme.CarouselIconSize && xPos < config.ScreenWidth {
 			iconRect := image.Rect(xPos, Theme.CarouselIconY, xPos+Theme.CarouselIconSize, Theme.CarouselIconY+Theme.CarouselIconSize)
 			iconImg := getIcon(item.Icon)
 
@@ -164,7 +159,7 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 	// Animate the visual index 
 	app.visualIndex += (float64(app.currentIndex) - app.visualIndex) * config.CurrentPrefs.AnimSpeed
 
-	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, config.ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, app.currentMenu.Title, ColorWhite)
 
 	if app.currentMenu.IsVertical {
@@ -175,17 +170,17 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 }
 
 func (app *App) renderMenu() {
-	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
+	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	app.renderMenuToImage(img)
 	app.display.DrawFrame(img)
 }
 
 func (app *App) renderStatus(status StatusUpdate) {
-	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
+	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, status.Title, ColorWhite)
-	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, config.ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 
 	drawString(img, Theme.HeaderTextX, Theme.StatusRow1Y, status.Row1, ColorWhite)
 	drawString(img, Theme.HeaderTextX, Theme.StatusRow2Y, status.Row2, ColorWhite)

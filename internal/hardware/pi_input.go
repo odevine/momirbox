@@ -26,7 +26,7 @@ func NewPiInput() (*PiInput, error) {
 	// Reference pins by their BCM numbering from the global config
 	pinEncA := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderA))
 	pinEncB := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderB))
-	pinSelect := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderBtn))
+	pinSelect := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderCen))
 	pinBack := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinBackBtn))
 
 	if pinEncA == nil || pinEncB == nil || pinSelect == nil || pinBack == nil {
