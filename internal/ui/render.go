@@ -77,6 +77,8 @@ func (app *App) renderSplash() {
 func (app *App) renderMenuToImage(img *image.RGBA) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
+	app.visualIndex += (float64(app.currentIndex) - app.visualIndex) * 0.15
+
 	// Header bar with menu title
 	draw.Draw(img, image.Rect(0, 14, 128, 15), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 	drawString(img, 2, 11, app.currentMenu.Title, ColorWhite)
@@ -86,7 +88,11 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 	baseX := (128 / 2) - 12
 
 	for i, item := range app.currentMenu.Items {
-		xPos := baseX + ((i - app.currentIndex) * itemSpacing)
+		offset := float64(i) - app.visualIndex
+		xPosFloat := float64(baseX) + (offset * float64(itemSpacing))
+		
+		// Convert back to int for each frame to remain pixel-perfect
+		xPos := int(xPosFloat)
 
 		if xPos > -24 && xPos < 128 {
 			iconRect := image.Rect(xPos, 22, xPos+24, 22+24)

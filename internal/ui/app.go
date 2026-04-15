@@ -33,6 +33,7 @@ type App struct {
 
 	// Navigation state
 	currentState AppState
+	visualIndex  float64
 	menuStack    []*Menu
 	indexStack   []int
 	currentMenu  *Menu
@@ -104,34 +105,34 @@ func (app *App) handleInput(action hardware.InputAction) {
 	}
 
 	switch action {
-	case hardware.InputRight:
-		app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
-	case hardware.InputLeft:
-		app.currentIndex--
-		if app.currentIndex < 0 {
-			app.currentIndex = len(app.currentMenu.Items) - 1
-		}
-	case hardware.InputSelect:
-		item := app.currentMenu.Items[app.currentIndex]
-		if item.Submenu != nil {
-			// Push current state to stack and descend into submenu
-			app.menuStack = append(app.menuStack, app.currentMenu)
-			app.indexStack = append(app.indexStack, app.currentIndex)
-			app.currentMenu = item.Submenu
-			app.currentIndex = 0
-		} else if item.Action != nil {
-			item.Action(app)
-		}
-	case hardware.InputBack:
-		if len(app.menuStack) > 0 {
-			// Return to previous menu level and restore selection index
-			lastIdx := len(app.menuStack) - 1
-			app.currentMenu = app.menuStack[lastIdx]
-			app.currentIndex = app.indexStack[lastIdx]
+		case hardware.InputRight:
+			app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
+		case hardware.InputLeft:
+			app.currentIndex--
+			if app.currentIndex < 0 {
+				app.currentIndex = len(app.currentMenu.Items) - 1
+			}
+		case hardware.InputSelect:
+			item := app.currentMenu.Items[app.currentIndex]
+			if item.Submenu != nil {
+				// Push current state to stack and descend into submenu
+				app.menuStack = append(app.menuStack, app.currentMenu)
+				app.indexStack = append(app.indexStack, app.currentIndex)
+				app.currentMenu = item.Submenu
+				app.currentIndex = 0
+			} else if item.Action != nil {
+				item.Action(app)
+			}
+		case hardware.InputBack:
+			if len(app.menuStack) > 0 {
+				// Return to previous menu level and restore selection index
+				lastIdx := len(app.menuStack) - 1
+				app.currentMenu = app.menuStack[lastIdx]
+				app.currentIndex = app.indexStack[lastIdx]
 			
-			app.menuStack = app.menuStack[:lastIdx]
+				app.menuStack = app.menuStack[:lastIdx]
 			app.indexStack = app.indexStack[:lastIdx]
-		}
+			}
 	}
 }
 
