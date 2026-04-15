@@ -8,8 +8,9 @@ import (
 )
 
 type Preferences struct {
-	EnableTokens  bool `json:"enable_tokens"`
-	IncludeUnsets bool `json:"include_unsets"`
+	EnableTokens  bool    `json:"enable_tokens"`
+	IncludeUnsets bool    `json:"include_unsets"`
+	AnimSpeed     float64 `json:"anim_speed"`
 }
 
 var CurrentPrefs Preferences
@@ -19,6 +20,7 @@ func InitPrefs() {
 	CurrentPrefs = Preferences{
 		EnableTokens:  true,
 		IncludeUnsets: false,
+		AnimSpeed:     0.15,
 	}
 
 	if _, err := os.Stat(PrefsFile); err == nil {

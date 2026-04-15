@@ -1,0 +1,32 @@
+{
+  "FontSize": 8,
+  "FontDPI": 72,
+
+  "SplashTextX": 35,
+  "SplashTextY": 35,
+
+  "HeaderTextX": 2,
+  "HeaderTextY": 8,
+  "HeaderLineY1": 11,
+  "HeaderLineY2": 12,
+
+  "VerticalRowHeight": 15,
+  "VerticalStartY": 22,
+  "VerticalTextX": 4,
+  "VerticalRightMargin": 124,
+  "VerticalMaxVisible": 3,
+  "VerticalHighlightTop": 10,
+  "VerticalHighlightBot": 4,
+
+  "CarouselItemSpacing": 40,
+  "CarouselIconSize": 24,
+  "CarouselIconY": 24,
+  "CarouselTextY": 56,
+
+  "StatusRow1Y": 28,
+  "StatusRow2Y": 40,
+  "ProgressBarX": 2,
+  "ProgressBarY": 50,
+  "ProgressBarWidth": 124,
+  "ProgressBarHeight": 4
+}

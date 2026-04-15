@@ -15,10 +15,16 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+const (
+	ScreenWidth  = 128
+	ScreenHeight = 64
+)
+
 var (
 	ColorBlack = color.RGBA{0, 0, 0, 255}
 	ColorWhite = color.RGBA{255, 255, 255, 255}
-	PixelFont  font.Face
+
+	PixelFont font.Face
 	iconCache = make(map[string]image.Image)
 )
 
@@ -35,21 +41,21 @@ func LoadFonts() error {
 	}
 
 	PixelFont, err = opentype.NewFace(f, &opentype.FaceOptions{
-		Size:    8,
-		DPI:     72,
+		// Note: We cast to float64 here as opentype expects it
+		Size:    float64(Theme.FontSize),
+		DPI:     float64(Theme.FontDPI),
 		Hinting: font.HintingFull,
 	})
 	return err
 }
 
 func (app *App) fallbackSplash(img *image.RGBA) {
-	drawString(img, 35, 35, "MomirBox", ColorWhite)
+	drawString(img, Theme.SplashTextX, Theme.SplashTextY, "MomirBox", ColorWhite)
 	app.display.DrawFrame(img)
 }
 
 func (app *App) renderSplash() {
-	// Create the native OLED-sized buffer (128x64)
-	img := image.NewRGBA(image.Rect(0, 0, 128, 64))
+	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 	splashPath := filepath.Join(config.AssetsDir, "momir_splash.png")
@@ -66,59 +72,84 @@ func (app *App) renderSplash() {
 		return
 	}
 
-	// Scale the splash image down to 128x64
-	// Using NearestNeighbor to keep the 1-bit style since we can't utilize anti-aliasing
 	xdraw.NearestNeighbor.Scale(img, img.Bounds(), splashImg, splashImg.Bounds(), draw.Over, nil)
-
 	app.display.DrawFrame(img)
 }
 
-// renderMenuToImage draws the current menu state onto a provided RGBA canvas.
-func (app *App) renderMenuToImage(img *image.RGBA) {
-	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
+func (app *App) renderVerticalList(img *image.RGBA) {
+	startIndex := 0
+	if app.currentIndex >= Theme.VerticalMaxVisible {
+		startIndex = app.currentIndex - Theme.VerticalMaxVisible + 1
+	}
 
-	app.visualIndex += (float64(app.currentIndex) - app.visualIndex) * 0.15
+	for i := 0; i < Theme.VerticalMaxVisible; i++ {
+		itemIndex := startIndex + i
+		if itemIndex >= len(app.currentMenu.Items) {
+			break
+		}
 
-	// Header bar with menu title
-	draw.Draw(img, image.Rect(0, 14, 128, 15), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-	drawString(img, 2, 11, app.currentMenu.Title, ColorWhite)
+		item := app.currentMenu.Items[itemIndex]
+		yPos := Theme.VerticalStartY + (i * Theme.VerticalRowHeight)
+		
+		if itemIndex == app.currentIndex {
+			bgRect := image.Rect(0, yPos-Theme.VerticalHighlightTop, ScreenWidth, yPos+Theme.VerticalHighlightBot)
+			draw.Draw(img, bgRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+			
+			valStr := item.GetValue()
+			if app.IsEditing {
+				valStr = "< " + valStr + " >"
+			}
+			
+			drawString(img, Theme.VerticalTextX, yPos, item.Label, ColorBlack)
+			
+			valWidth := font.MeasureString(PixelFont, valStr).Ceil()
+			valX := Theme.VerticalRightMargin - valWidth
+			drawString(img, valX, yPos, valStr, ColorBlack)
 
-	// Horizontal scrolling icons
-	itemSpacing := 40
-	baseX := (128 / 2) - 12
+		} else {
+			drawString(img, Theme.VerticalTextX, yPos, item.Label, ColorWhite)
+			
+			if item.GetValue != nil {
+				valStr := item.GetValue()
+				valWidth := font.MeasureString(PixelFont, valStr).Ceil()
+				valX := Theme.VerticalRightMargin - valWidth
+				drawString(img, valX, yPos, valStr, ColorWhite)
+			}
+		}
+	}
+}
+
+func (app *App) renderHorizontalCarousel(img *image.RGBA) {
+	baseX := (ScreenWidth / 2) - (Theme.CarouselIconSize / 2)
 
 	for i, item := range app.currentMenu.Items {
 		offset := float64(i) - app.visualIndex
-		xPosFloat := float64(baseX) + (offset * float64(itemSpacing))
-		
-		// Convert back to int for each frame to remain pixel-perfect
+		xPosFloat := float64(baseX) + (offset * float64(Theme.CarouselItemSpacing))
 		xPos := int(xPosFloat)
 
-		if xPos > -24 && xPos < 128 {
-			iconRect := image.Rect(xPos, 22, xPos+24, 22+24)
+		if xPos > -Theme.CarouselIconSize && xPos < ScreenWidth {
+			iconRect := image.Rect(xPos, Theme.CarouselIconY, xPos+Theme.CarouselIconSize, Theme.CarouselIconY+Theme.CarouselIconSize)
 			iconImg := getIcon(item.Icon)
 
 			if i == app.currentIndex {
 				if iconImg != nil {
 					xdraw.NearestNeighbor.Scale(img, iconRect, iconImg, iconImg.Bounds(), draw.Over, nil)
 				} else {
-					// Fallback: Solid white block
 					draw.Draw(img, iconRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 				}
 
-				textX := xPos + 12
+				textX := xPos + (Theme.CarouselIconSize / 2)
 				if PixelFont != nil {
 					textWidth := font.MeasureString(PixelFont, item.Label).Ceil()
-					textX = xPos + 12 - (textWidth / 2)
+					textX -= (textWidth / 2)
 				}
 				
-				drawString(img, textX, 58, item.Label, ColorWhite)
+				drawString(img, textX, Theme.CarouselTextY, item.Label, ColorWhite)
 			} else {
 				if iconImg != nil {
 					xdraw.NearestNeighbor.Scale(img, iconRect, iconImg, iconImg.Bounds(), draw.Over, nil)
 				} else {
-					// Fallback: Hollow block
-					innerRect := image.Rect(xPos+1, 23, xPos+23, 22+23)
+					innerRect := image.Rect(xPos+1, Theme.CarouselIconY+1, xPos+(Theme.CarouselIconSize-1), Theme.CarouselIconY+(Theme.CarouselIconSize-1))
 					draw.Draw(img, iconRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 					draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 				}
@@ -127,41 +158,57 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 	}
 }
 
+func (app *App) renderMenuToImage(img *image.RGBA) {
+	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
+
+	// Animate the visual index 
+	app.visualIndex += (float64(app.currentIndex) - app.visualIndex) * config.CurrentPrefs.AnimSpeed
+
+	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, app.currentMenu.Title, ColorWhite)
+
+	if app.currentMenu.IsVertical {
+		app.renderVerticalList(img)
+	} else {
+		app.renderHorizontalCarousel(img)
+	}
+}
+
 func (app *App) renderMenu() {
-	img := image.NewRGBA(image.Rect(0, 0, 128, 64))
+	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
 	app.renderMenuToImage(img)
 	app.display.DrawFrame(img)
 }
 
-// renderStatus draws a standardized overlay for progress bars and system messages.
 func (app *App) renderStatus(status StatusUpdate) {
-	img := image.NewRGBA(image.Rect(0, 0, 128, 64))
+	img := image.NewRGBA(image.Rect(0, 0, ScreenWidth, ScreenHeight))
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
-	drawString(img, 2, 11, status.Title, ColorWhite)
-	draw.Draw(img, image.Rect(0, 14, 128, 15), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, status.Title, ColorWhite)
+	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 
-	drawString(img, 2, 28, status.Row1, ColorWhite)
-	drawString(img, 2, 40, status.Row2, ColorWhite)
+	drawString(img, Theme.HeaderTextX, Theme.StatusRow1Y, status.Row1, ColorWhite)
+	drawString(img, Theme.HeaderTextX, Theme.StatusRow2Y, status.Row2, ColorWhite)
 
 	if status.Progress > 0 {
-		barWidth := int(124 * status.Progress)
-		// Draw progress bar border
-		draw.Draw(img, image.Rect(2, 50, 126, 54), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-		// Hollow out the center
-		draw.Draw(img, image.Rect(3, 51, 125, 53), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-		// Fill current progress
+		barWidth := int(float64(Theme.ProgressBarWidth) * status.Progress)
+		
+		outerRect := image.Rect(Theme.ProgressBarX, Theme.ProgressBarY, Theme.ProgressBarX+Theme.ProgressBarWidth+2, Theme.ProgressBarY+Theme.ProgressBarHeight)
+		innerRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+Theme.ProgressBarWidth+1, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
+		
+		draw.Draw(img, outerRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+		draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
+		
 		if barWidth > 0 {
-			draw.Draw(img, image.Rect(3, 51, 3+barWidth, 53), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+			fillRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+1+barWidth, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
+			draw.Draw(img, fillRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 		}
 	}
 
 	app.display.DrawFrame(img)
 }
 
-// drawString is a helper for rendering text using our custom TTF font.
 func drawString(img *image.RGBA, x, y int, label string, col color.Color) {
-	// Fallback check in case LoadFonts() failed or wasn't called
 	if PixelFont == nil {
 		return 
 	}
@@ -169,24 +216,21 @@ func drawString(img *image.RGBA, x, y int, label string, col color.Color) {
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
-		Face: PixelFont, // Swapped to our TTF font!
+		Face: PixelFont,
 		Dot:  fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)},
 	}
 	d.DrawString(label)
 }
 
-// getIcon loads an image from disk and caches it, returning the cached version on subsequent calls.
 func getIcon(filename string) image.Image {
 	if filename == "" {
 		return nil
 	}
 	
-	// Return from cache if we already loaded it
 	if img, ok := iconCache[filename]; ok {
 		return img
 	}
 
-	// Otherwise, load it from the assets directory
 	iconPath := filepath.Join(config.IconsDir, filename)
 	file, err := os.Open(iconPath)
 	if err != nil {
@@ -199,7 +243,6 @@ func getIcon(filename string) image.Image {
 		return nil
 	}
 
-	// Save to cache and return
 	iconCache[filename] = img
 	return img
 }

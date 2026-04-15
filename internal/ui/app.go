@@ -34,6 +34,7 @@ type App struct {
 	// Navigation state
 	currentState AppState
 	visualIndex  float64
+	IsEditing    bool
 	menuStack    []*Menu
 	indexStack   []int
 	currentMenu  *Menu
@@ -51,6 +52,7 @@ func NewApp(d hardware.Display, i hardware.Input, p hardware.Printer) *App {
 		input:        i,
 		Printer:      p,
 		currentState: StateSplash,
+		IsEditing:    false,
 		StatusChan:   make(chan StatusUpdate, 10),
 		quitChan:     make(chan struct{}),
 	}
@@ -104,35 +106,50 @@ func (app *App) handleInput(action hardware.InputAction) {
 		return 
 	}
 
+	item := app.currentMenu.Items[app.currentIndex]
+
 	switch action {
-		case hardware.InputRight:
+	case hardware.InputRight:
+		if app.IsEditing && item.Adjust != nil {
+			// Increase value when editing
+			item.Adjust(app, 1) 
+		} else {
 			app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
-		case hardware.InputLeft:
+		}
+	case hardware.InputLeft:
+		if app.IsEditing && item.Adjust != nil {
+			// Decrease value when editing
+			item.Adjust(app, -1)
+		} else {
 			app.currentIndex--
 			if app.currentIndex < 0 {
 				app.currentIndex = len(app.currentMenu.Items) - 1
 			}
-		case hardware.InputSelect:
-			item := app.currentMenu.Items[app.currentIndex]
-			if item.Submenu != nil {
-				// Push current state to stack and descend into submenu
-				app.menuStack = append(app.menuStack, app.currentMenu)
-				app.indexStack = append(app.indexStack, app.currentIndex)
-				app.currentMenu = item.Submenu
-				app.currentIndex = 0
-			} else if item.Action != nil {
-				item.Action(app)
-			}
-		case hardware.InputBack:
-			if len(app.menuStack) > 0 {
-				// Return to previous menu level and restore selection index
-				lastIdx := len(app.menuStack) - 1
-				app.currentMenu = app.menuStack[lastIdx]
-				app.currentIndex = app.indexStack[lastIdx]
-			
-				app.menuStack = app.menuStack[:lastIdx]
+		}
+	case hardware.InputSelect:
+		if item.Adjust != nil {
+			// Toggle edit mode lock on/off
+			app.IsEditing = !app.IsEditing
+		} else if item.Submenu != nil {
+			app.menuStack = append(app.menuStack, app.currentMenu)
+			app.indexStack = append(app.indexStack, app.currentIndex)
+			app.currentMenu = item.Submenu
+			app.currentIndex = 0
+			app.IsEditing = false
+		} else if item.Action != nil {
+			item.Action(app)
+		}
+	case hardware.InputBack:
+		if app.IsEditing {
+			// Cancel editing without going back a menu level
+			app.IsEditing = false
+		} else if len(app.menuStack) > 0 {
+			lastIdx := len(app.menuStack) - 1
+			app.currentMenu = app.menuStack[lastIdx]
+			app.currentIndex = app.indexStack[lastIdx]
+			app.menuStack = app.menuStack[:lastIdx]
 			app.indexStack = app.indexStack[:lastIdx]
-			}
+		}
 	}
 }
 

@@ -8,18 +8,23 @@ import (
 )
 
 type ActionFunc func(app *App)
+type AdjustFunc func(app *App, delta int)
+type GetValueFunc func() string
 
 // MenuItem represents a single entry in a menu, which can either trigger an action or open a submenu.
 type MenuItem struct {
-	Label   string
-	Icon    string
-	Submenu *Menu
-	Action  ActionFunc
+	Label    string
+	Icon     string
+	Submenu  *Menu
+	Action   ActionFunc
+	Adjust   AdjustFunc
+	GetValue GetValueFunc
 }
 
 type Menu struct {
 	Title string
 	Items []MenuItem
+	IsVertical bool
 }
 
 // BuildMenuTree constructs the application's navigation hierarchy based on current preferences.
@@ -42,22 +47,42 @@ func BuildMenuTree() *Menu {
 		}
 	}
 
-	// Preference toggles that trigger a menu rebuild upon change
 	prefsSubmenu := &Menu{
-		Title: "Prefs",
+		Title:      "Prefs",
+		IsVertical: true,
 		Items: []MenuItem{
 			{
-				Label: fmt.Sprintf("Tokens: %v", config.CurrentPrefs.EnableTokens),
-				Action: func(app *App) {
-					config.ToggleTokens()
-					app.currentMenu = BuildMenuTree()
+				Label: "Anim Speed",
+				GetValue: func() string {
+					return fmt.Sprintf("%.2f", config.CurrentPrefs.AnimSpeed)
+				},
+				Adjust: func(app *App, delta int) {
+					newSpeed := config.CurrentPrefs.AnimSpeed + (float64(delta) * 0.05)
+					if newSpeed < 0.05 { newSpeed = 0.05 }
+					if newSpeed > 1.00 { newSpeed = 1.00 }
+					config.CurrentPrefs.AnimSpeed = newSpeed
 				},
 			},
 			{
-				Label: fmt.Sprintf("Un-sets: %v", config.CurrentPrefs.IncludeUnsets),
-				Action: func(app *App) {
+				Label: "Tokens",
+				GetValue: func() string {
+					if config.CurrentPrefs.EnableTokens { return "On" }
+					return "Off"
+				},
+				Adjust: func(app *App, delta int) {
+					config.ToggleTokens()
+				},
+			},
+			{
+				Label: "Un-sets",
+				GetValue: func() string {
+					if config.CurrentPrefs.IncludeUnsets {
+						return "On"
+					}
+					return "Off"
+				},
+				Adjust: func(app *App, delta int) {
 					config.ToggleUnsets()
-					app.currentMenu = BuildMenuTree()
 				},
 			},
 		},

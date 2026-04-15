@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"momirbox/internal/config"
 	"momirbox/internal/hardware"
@@ -13,16 +14,18 @@ import (
 
 func main() {
 	config.InitPrefs()
-	
-	if err := ui.LoadFonts(); err != nil {
-		panic(fmt.Sprintf("Failed to load fonts: %v", err))
+
+	themePath := filepath.Join(config.AssetsDir, "theme.json") 
+	if err := ui.LoadTheme(themePath); err != nil {
+		fmt.Printf("Warning: Could not load theme.json: %v\n", err)
 	}
 
-	// Direct execution path based on detected platform
+	ui.LoadFonts()
+
 	if config.IsRaspberryPi {
 		runPhysicalHardware()
 	} else {
-		runEmulator()
+		runEmulator(themePath)
 	}
 }
 
@@ -52,8 +55,10 @@ func runPhysicalHardware() {
 	app.Run()
 }
 
-func runEmulator() {
+func runEmulator(themePath string) {
 	fmt.Println("Starting MomirBox Emulator...")
+	// Watch the theme file for changes and reload it automatically
+	go ui.WatchTheme(themePath)
 
 	emulator := hardware.NewEmulator()
 	mockPrinter := hardware.NewMockPrinter()
