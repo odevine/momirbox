@@ -1,0 +1,39 @@
+# -----------------------------
+# 1. Downloaded Data and Images
+# -----------------------------
+# Ignore the massive MTGJSON files and tracking states
+data/AllPrintings.json
+data/tracked_sets.json
+data/updates/
+data/images/
+
+# -----------------------------
+# 3. Go Binaries & Build Files
+# -----------------------------
+momirbox
+momirbox.exe
+momirbox.app
+*.o
+*.a
+*.so
+*.test
+*.out
+vendor/
+
+# -----------------------------
+# 4. OS Specific & Environment
+# -----------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# -----------------------------
+# 5. IDEs and Editors
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
