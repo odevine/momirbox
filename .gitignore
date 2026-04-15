@@ -4,6 +4,7 @@
 # Ignore the massive MTGJSON files and tracking states
 data/AllPrintings.json
 data/tracked_sets.json
+data/preferences.json
 data/updates/
 data/images/
 

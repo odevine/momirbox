@@ -18,7 +18,7 @@ var CurrentPrefs Preferences
 // InitPrefs loads user settings from disk or falls back to defaults
 func InitPrefs() {
 	CurrentPrefs = Preferences{
-		EnableTokens:  true,
+		EnableTokens:  false,
 		IncludeUnsets: false,
 		AnimSpeed:     0.15,
 	}

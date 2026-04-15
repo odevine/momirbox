@@ -47,8 +47,8 @@ func BuildMenuTree() *Menu {
 		}
 	}
 
-	prefsSubmenu := &Menu{
-		Title:      "Prefs",
+	settingsSubmenu := &Menu{
+		Title:      "Settings",
 		IsVertical: true,
 		Items: []MenuItem{
 			{
@@ -64,9 +64,11 @@ func BuildMenuTree() *Menu {
 				},
 			},
 			{
-				Label: "Tokens",
+				Label: "Tokens Feature",
 				GetValue: func() string {
-					if config.CurrentPrefs.EnableTokens { return "On" }
+					if config.CurrentPrefs.EnableTokens {
+						return "On"
+					}
 					return "Off"
 				},
 				Adjust: func(app *App, delta int) {
@@ -74,7 +76,7 @@ func BuildMenuTree() *Menu {
 				},
 			},
 			{
-				Label: "Un-sets",
+				Label: "Include Un-sets",
 				GetValue: func() string {
 					if config.CurrentPrefs.IncludeUnsets {
 						return "On"
@@ -88,12 +90,12 @@ func BuildMenuTree() *Menu {
 		},
 	}
 
-	settingsSubmenu := &Menu{
-		Title: "Settings",
+	syncSubmenu := &Menu{
+		Title: "Sync",
 		Items: []MenuItem{
 			{
 				Label: "Update DB",
-				Icon: "update_db_icon.png",
+				Icon: "update_db.png",
 				Action: func(app *App) {
 					app.StatusChan <- StatusUpdate{Title: "DB Update", Row1: "Starting up...", Progress: 0.0}
 					go mtgdb.UpdateDatabase(func(row1, row2 string, progress float64, isDone bool) {
@@ -105,7 +107,7 @@ func BuildMenuTree() *Menu {
 			},
 			{
 				Label: "Sync Creatures",
-				Icon: "download_icon.png",
+				Icon: "download.png",
 				Action: func(app *App) {
 					app.StatusChan <- StatusUpdate{Title: "Sync Creatures", Row1: "Starting up...", Progress: 0.0}
 					go mtgdb.SyncCreatures(func(row1, row2 string, progress float64, isDone bool) {
@@ -115,15 +117,14 @@ func BuildMenuTree() *Menu {
 					})
 				},
 			},
-			{Label: "Prefs", Submenu: prefsSubmenu},
 		},
 	}
 
 	// Conditionally add Token synchronization if enabled in preferences
 	if config.CurrentPrefs.EnableTokens {
-		settingsSubmenu.Items = append(settingsSubmenu.Items, MenuItem{
+		syncSubmenu.Items = append(syncSubmenu.Items, MenuItem{
 			Label: "Sync Tokens",
-			Icon: "download_icon.png",
+			Icon: "download.png",
 			Action: func(app *App) {
 				app.StatusChan <- StatusUpdate{Title: "Sync Tokens", Row1: "Starting up...", Progress: 0.0}
 				go mtgdb.SyncTokens(func(row1, row2 string, progress float64, isDone bool) {
@@ -140,7 +141,7 @@ func BuildMenuTree() *Menu {
 	rootItems := []MenuItem{
 		{
 			Label: "Momir Basic",
-			Icon: "momir_icon.png",
+			Icon: "momir.png",
 			Submenu: momirSubmenu,
 		},
 	}
@@ -154,19 +155,26 @@ func BuildMenuTree() *Menu {
 		}
 		rootItems = append(rootItems, MenuItem{
 			Label: "Tokens",
-			Icon: "token_icon.png",
+			Icon: "token.png",
 			Submenu: tokensSubmenu,
 		})
 	}
 
 	rootItems = append(rootItems, MenuItem{
+		Label: "Sync",
+		Icon: "sync.png",
+		Submenu: syncSubmenu,
+	})
+
+	rootItems = append(rootItems, MenuItem{
 		Label: "Settings",
-		Icon: "settings_icon.png",
+		Icon: "settings.png",
 		Submenu: settingsSubmenu,
 	})
+
 	rootItems = append(rootItems, MenuItem{
 		Label: "Power Off",
-		Icon: "power_icon.png",
+		Icon: "power.png",
 		Action: func(app *App) { app.PowerOff() },
 	})
 
