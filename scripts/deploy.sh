@@ -1,10 +1,13 @@
 #!/bin/bash
 
-# Configuration
-APP_NAME="momirbox"
-PI_USER="momir"
-PI_HOST="YOUR_RASPBERRY_PI_IP"
-PI_DEST="/home/momir/momirbox"
+cd "$(dirname "$0")"
+
+if [ -f .env ]; then
+    export $(cat .env | xargs)
+else
+    echo ".env file not found!"
+    exit 1
+fi
 
 cleanup() {
     echo -e "\n--- Stopping $APP_NAME on Raspberry Pi ---"
@@ -26,4 +29,4 @@ rsync -avz assets/ $PI_USER@$PI_HOST:$PI_DEST/assets/
 echo "--- Done! ---"
 
 echo "--- Launching App (Press Ctrl+C here to stop it) ---"
-ssh -t $PI_USER@$PI_HOST "pkill $APP_NAME || true; cd $PI_DEST && ./$APP_NAME"
+ssh -t $PI_USER@$PI_HOST "pkill $APP_NAME || true; cd $PI_DEST && ./$APP_NAME 2>&1 | tee momirbox.log"
