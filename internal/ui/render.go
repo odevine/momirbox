@@ -175,8 +175,7 @@ func (app *App) renderMenu() {
 	app.display.DrawFrame(img)
 }
 
-func (app *App) renderStatus(status StatusUpdate) {
-	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
+func (app *App) renderStatusToImage(img *image.RGBA, status StatusUpdate) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, status.Title, ColorWhite)
@@ -199,6 +198,39 @@ func (app *App) renderStatus(status StatusUpdate) {
 			draw.Draw(img, fillRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 		}
 	}
+}
+
+func (app *App) renderStatus(status StatusUpdate) {
+	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
+	app.renderStatusToImage(img, status)
+	app.display.DrawFrame(img)
+}
+
+func (app *App) renderConfirmModal() {
+	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
+	
+	// Draw the background loading screen
+	app.renderStatusToImage(img, app.lastStatus)
+
+	// Draw the Modal box centered on the screen
+	modalRect := image.Rect(16, 12, 112, 52)
+	innerRect := image.Rect(18, 14, 110, 50)
+	draw.Draw(img, modalRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
+
+	// Draw text
+	drawString(img, 24, 26, "Cancel Sync?", ColorWhite)
+
+	yesText := "  YES  "
+	noText := "  NO  "
+	if app.confirmYes {
+		yesText = "> YES <"
+	} else {
+		noText = "> NO <"
+	}
+
+	drawString(img, 20, 44, yesText, ColorWhite)
+	drawString(img, 72, 44, noText, ColorWhite)
 
 	app.display.DrawFrame(img)
 }

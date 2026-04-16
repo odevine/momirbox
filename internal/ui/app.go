@@ -14,6 +14,7 @@ const (
 	StateMenu
 	StateGambling
 	StateStatusOverlay
+	StateConfirmCancel
 )
 
 // StatusUpdate facilitates UI-neutral progress reporting from background tasks.
@@ -39,6 +40,11 @@ type App struct {
 	indexStack   []int
 	currentMenu  *Menu
 	currentIndex int
+
+	// Cancellation state
+	lastStatus   StatusUpdate
+	confirmYes   bool
+	cancelChan   chan struct{}
 
 	// Concurrency
 	StatusChan chan StatusUpdate
@@ -75,26 +81,32 @@ func (app *App) Run() {
 			return
 
 		case status := <-app.StatusChan:
-			// Handle status updates from the downloader or sync engine
+			app.lastStatus = status
+			
 			if status.IsDone {
 				app.currentState = StateMenu
-			} else {
+				app.currentMenu = BuildMenuTree()
+				app.menuStack = nil
+				app.indexStack = nil 
+				app.currentIndex = 0
+			} else if app.currentState != StateConfirmCancel {
 				app.currentState = StateStatusOverlay
 				app.renderStatus(status)
 			}
 
 		default:
-			// Process hardware inputs non-blockingly
 			action := app.input.Poll()
 			if action != hardware.InputNone {
 				app.handleInput(action)
 			}
 
+			// Render routing
 			if app.currentState == StateMenu {
 				app.renderMenu()
+			} else if app.currentState == StateConfirmCancel {
+				app.renderConfirmModal()
 			}
 
-			// Target ~60 FPS to keep the horizontal menu smooth
 			time.Sleep(16 * time.Millisecond)
 		}
 	}
@@ -102,53 +114,73 @@ func (app *App) Run() {
 
 // handleInput translates hardware actions into menu navigation or function calls.
 func (app *App) handleInput(action hardware.InputAction) {
-	if app.currentState != StateMenu {
-		return 
-	}
-
-	item := app.currentMenu.Items[app.currentIndex]
-
-	switch action {
-	case hardware.InputRight:
-		if app.IsEditing && item.Adjust != nil {
-			// Increase value when editing
-			item.Adjust(app, 1) 
-		} else {
-			app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
-		}
-	case hardware.InputLeft:
-		if app.IsEditing && item.Adjust != nil {
-			// Decrease value when editing
-			item.Adjust(app, -1)
-		} else {
-			app.currentIndex--
-			if app.currentIndex < 0 {
-				app.currentIndex = len(app.currentMenu.Items) - 1
+	switch app.currentState {
+	case StateMenu:
+		item := app.currentMenu.Items[app.currentIndex]
+		switch action {
+		case hardware.InputRight:
+			if app.IsEditing && item.Adjust != nil {
+				item.Adjust(app, 1)
+			} else {
+				app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
+			}
+		case hardware.InputLeft:
+			if app.IsEditing && item.Adjust != nil {
+				item.Adjust(app, -1)
+			} else {
+				app.currentIndex--
+				if app.currentIndex < 0 {
+					app.currentIndex = len(app.currentMenu.Items) - 1
+				}
+			}
+		case hardware.InputSelect:
+			if item.Adjust != nil {
+				app.IsEditing = !app.IsEditing
+			} else if item.Submenu != nil {
+				app.menuStack = append(app.menuStack, app.currentMenu)
+				app.indexStack = append(app.indexStack, app.currentIndex)
+				app.currentMenu = item.Submenu
+				app.currentIndex = 0
+				app.IsEditing = false
+			} else if item.Action != nil {
+				item.Action(app)
+			}
+		case hardware.InputBack:
+			if app.IsEditing {
+				app.IsEditing = false
+			} else if len(app.menuStack) > 0 {
+				lastIdx := len(app.menuStack) - 1
+				app.currentMenu = app.menuStack[lastIdx]
+				app.currentIndex = app.indexStack[lastIdx]
+				app.menuStack = app.menuStack[:lastIdx]
+				app.indexStack = app.indexStack[:lastIdx]
 			}
 		}
-	case hardware.InputSelect:
-		if item.Adjust != nil {
-			// Toggle edit mode lock on/off
-			app.IsEditing = !app.IsEditing
-		} else if item.Submenu != nil {
-			app.menuStack = append(app.menuStack, app.currentMenu)
-			app.indexStack = append(app.indexStack, app.currentIndex)
-			app.currentMenu = item.Submenu
-			app.currentIndex = 0
-			app.IsEditing = false
-		} else if item.Action != nil {
-			item.Action(app)
+
+	case StateStatusOverlay:
+		if action == hardware.InputBack {
+			app.currentState = StateConfirmCancel
+			app.confirmYes = false
 		}
-	case hardware.InputBack:
-		if app.IsEditing {
-			// Cancel editing without going back a menu level
-			app.IsEditing = false
-		} else if len(app.menuStack) > 0 {
-			lastIdx := len(app.menuStack) - 1
-			app.currentMenu = app.menuStack[lastIdx]
-			app.currentIndex = app.indexStack[lastIdx]
-			app.menuStack = app.menuStack[:lastIdx]
-			app.indexStack = app.indexStack[:lastIdx]
+
+	case StateConfirmCancel:
+		switch action {
+		case hardware.InputLeft, hardware.InputRight:
+			app.confirmYes = !app.confirmYes
+		case hardware.InputBack:
+			app.currentState = StateStatusOverlay
+			app.renderStatus(app.lastStatus)
+		case hardware.InputSelect:
+			if app.confirmYes {
+				if app.cancelChan != nil {
+					close(app.cancelChan)
+					app.cancelChan = nil
+				}
+				app.currentState = StateMenu
+			} else {
+				app.currentState = StateStatusOverlay
+				app.renderStatus(app.lastStatus)
+			}
 		}
 	}
 }

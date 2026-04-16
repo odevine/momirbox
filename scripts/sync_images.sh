@@ -2,8 +2,8 @@
 
 cd "$(dirname "$0")"
 
-if [ -f .env ]; then
-    export $(cat .env | xargs)
+if [ -f ../.env ]; then
+    export $(cat ../.env | xargs)
 else
     echo ".env file not found!"
     exit 1

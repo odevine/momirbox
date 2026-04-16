@@ -1,16 +1,21 @@
 package mtgdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"momirbox/internal/config"
+
+	"github.com/rs/zerolog/log"
 )
 
-// CardVersion matches the structure inside a Set in MTGJSON v5.
+// CardVersion represents the MTGJSON v5 schema for a card within a set.
 type CardVersion struct {
 	Name        string   `json:"name"`
 	FaceName    string   `json:"faceName"`
@@ -27,14 +32,14 @@ type CardVersion struct {
 	} `json:"legalities"`
 }
 
-// LeanCreature represents the minimal data needed for the Momir list.
+// LeanCreature holds the minimal fields required for Momir Basic logic.
 type LeanCreature struct {
 	Name       string
 	CMC        int
 	ScryfallID string
 }
 
-// TokenVersion matches the token structure inside a Set.
+// TokenVersion represents the MTGJSON v5 schema for a token within a set.
 type TokenVersion struct {
 	Name         string   `json:"name"`
 	FaceName     string   `json:"faceName"`
@@ -54,7 +59,7 @@ type TokenVersion struct {
 	} `json:"identifiers"`
 }
 
-// LeanToken represents the minimal data needed for the tokens list.
+// LeanToken holds filtered metadata for token asset organization and printing.
 type LeanToken struct {
 	Name       string
 	Category   string
@@ -65,119 +70,90 @@ type LeanToken struct {
 	IsBackFace bool
 }
 
-// MTGSet represents the root object for a specific Magic set.
+// MTGSet represents the root object for a specific Magic set in a JSON stream.
 type MTGSet struct {
 	Cards  []CardVersion  `json:"cards"`
 	Tokens []TokenVersion `json:"tokens"`
 }
 
-// ParseAllPrintingsCreatures loads all Magic: The Gathering creature data from the local database.
-// It processes both the main AllPrintings.json file and any update files, returning a deduplicated list of creatures.
-func ParseAllPrintingsCreatures() ([]LeanCreature, error) {
+// ParseAllPrintingsCreatures aggregates legal creatures from bulk and update files.
+func ParseAllPrintingsCreatures(cancelChan <-chan struct{}, callback SyncCallback) ([]LeanCreature, error) {
 	creatureMap := make(map[string]LeanCreature)
-
 	allPrintingsPath := filepath.Join(config.DataDir, "AllPrintings.json")
-	updatesDir := filepath.Join(config.DataDir, "updates")
 
-	if _, err := os.Stat(allPrintingsPath); err == nil {
-		err := streamBulkFile(allPrintingsPath, func(set MTGSet) {
-			processSet(set, creatureMap)
-		})
-		if err != nil {
-			fmt.Printf("Warning: Failed to parse AllPrintings.json creatures: %v\n", err)
-		}
-	} else {
-		return nil, fmt.Errorf("AllPrintings.json not found. Please Update DB first")
+	if !FileExists(allPrintingsPath) {
+		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
-	if entries, err := os.ReadDir(updatesDir); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-				setPath := filepath.Join(updatesDir, entry.Name())
-				err := streamUpdateFile(setPath, func(set MTGSet) {
-					processSet(set, creatureMap)
-				})
-				if err != nil {
-					fmt.Printf("Warning: Failed to parse update file %s creatures: %v\n", entry.Name(), err)
-				}
-			}
-		}
+	err := streamBulkFile(allPrintingsPath, "Parsing Creatures...", cancelChan, callback, func(set MTGSet) {
+		processSet(set, creatureMap)
+	})
+	if err != nil && !IsRootCancellation(err) {
+		log.Warn().Err(err).Msg("failed to parse bulk creatures")
 	}
 
-	var momirList []LeanCreature
+	if err := processUpdates(cancelChan, func(set MTGSet) {
+		processSet(set, creatureMap)
+	}); err != nil {
+		return nil, err
+	}
+
+	list := make([]LeanCreature, 0, len(creatureMap))
 	for _, c := range creatureMap {
-		momirList = append(momirList, c)
+		list = append(list, c)
 	}
-
-	return momirList, nil
+	return list, nil
 }
 
-// ParseAllPrintingsTokens builds the complete token list from the bulk file AND the updates folder.
-func ParseAllPrintingsTokens() ([]LeanToken, error) {
-	// We use a string key for deduplication: "Name|Colors|Power|Toughness|Keywords"
+// ParseAllPrintingsTokens aggregates unique tokens from bulk and update files.
+func ParseAllPrintingsTokens(cancelChan <-chan struct{}, callback SyncCallback) ([]LeanToken, error) {
 	tokenMap := make(map[string]LeanToken)
-
 	allPrintingsPath := filepath.Join(config.DataDir, "AllPrintings.json")
-	updatesDir := filepath.Join(config.DataDir, "updates")
 
-	if _, err := os.Stat(allPrintingsPath); err == nil {
-		err := streamBulkFile(allPrintingsPath, func(set MTGSet) {
-			processTokens(set, tokenMap)
-		})
-		if err != nil {
-			fmt.Printf("Warning: Failed to parse AllPrintings.json tokens: %v\n", err)
-		}
-	} else {
-		return nil, fmt.Errorf("AllPrintings.json not found. Please Update DB first")
+	if !FileExists(allPrintingsPath) {
+		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
-	if entries, err := os.ReadDir(updatesDir); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-				setPath := filepath.Join(updatesDir, entry.Name())
-				err := streamUpdateFile(setPath, func(set MTGSet) {
-					processTokens(set, tokenMap)
-				})
-				if err != nil {
-					fmt.Printf("Warning: Failed to parse update file %s tokens: %v\n", entry.Name(), err)
-				}
-			}
-		}
+	err := streamBulkFile(allPrintingsPath, "Parsing Tokens...", cancelChan, callback, func(set MTGSet) {
+		processTokens(set, tokenMap)
+	})
+	if err != nil && !IsRootCancellation(err) {
+		log.Warn().Err(err).Msg("failed to parse bulk tokens")
 	}
 
-	var momirList []LeanToken
+	if err := processUpdates(cancelChan, func(set MTGSet) {
+		processTokens(set, tokenMap)
+	}); err != nil {
+		return nil, err
+	}
+
+	list := make([]LeanToken, 0, len(tokenMap))
 	for _, t := range tokenMap {
-		momirList = append(momirList, t)
+		list = append(list, t)
 	}
-
-	return momirList, nil
+	return list, nil
 }
 
-// processSet applies the Momir Basic legality rules to a single set and adds valid cards to the map.
 func processSet(set MTGSet, creatureMap map[string]LeanCreature) {
 	for _, card := range set.Cards {
 		if card.Layout == "token" || card.IsToken || contains(card.Types, "Token") {
 			continue
 		}
-		if !contains(card.Types, "Creature") {
-			continue
-		}
-		if strings.ToLower(card.Legalities.Vintage) != "legal" {
+		if !contains(card.Types, "Creature") || strings.ToLower(card.Legalities.Vintage) != "legal" {
 			continue
 		}
 		if card.IsFunny || card.Identifiers.ScryfallID == "" {
 			continue
 		}
 
-		// Handle double-faced cards safely
-		frontName := card.FaceName
-		if frontName == "" {
-			frontName = strings.Split(card.Name, " // ")[0]
+		name := card.FaceName
+		if name == "" {
+			name = strings.Split(card.Name, " // ")[0]
 		}
 
-		if _, exists := creatureMap[frontName]; !exists {
-			creatureMap[frontName] = LeanCreature{
-				Name:       frontName,
+		if _, exists := creatureMap[name]; !exists {
+			creatureMap[name] = LeanCreature{
+				Name:       name,
 				CMC:        int(card.ManaValue),
 				ScryfallID: card.Identifiers.ScryfallID,
 			}
@@ -185,7 +161,6 @@ func processSet(set MTGSet, creatureMap map[string]LeanCreature) {
 	}
 }
 
-// processTokens adds tokens from a set to the token map, applying various filters and deduplication.
 func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
 	for _, token := range set.Tokens {
 		name := token.FaceName
@@ -193,7 +168,6 @@ func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
 			name = token.Name
 		}
 
-		// Junk filters
 		if token.Layout == "art_series" || contains(token.Types, "Card") || token.TypeLine == "Card" {
 			continue
 		}
@@ -204,92 +178,143 @@ func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
 			continue
 		}
 
-		// Verify keywords actually appear in text
-		faceTextLower := strings.ToLower(token.Text)
-		var verifiedKeywords []string
-		for _, kw := range token.Keywords {
-			if strings.Contains(faceTextLower, strings.ToLower(kw)) {
-				verifiedKeywords = append(verifiedKeywords, kw)
-			}
-		}
-
-		// Sort colors for consistent pathing
+		verifiedKeywords := verifyKeywords(token.Text, token.Keywords)
 		colors := "C"
 		if len(token.Colors) > 0 {
-			colors = strings.Join(token.Colors, "") 
+			colors = strings.Join(token.Colors, "")
 		}
 
-		power := token.Power
-		if power == "" {
-			power = "?"
-		}
-		toughness := token.Toughness
-		if toughness == "" {
-			toughness = "?"
-		}
+		p, t := token.Power, token.Toughness
+		if p == "" { p = "?" }
+		if t == "" { t = "?" }
 
-		// Unique identity key
-		identity := fmt.Sprintf("%s|%s|%s|%s|%v", name, colors, power, toughness, verifiedKeywords)
-
+		identity := fmt.Sprintf("%s|%s|%s|%s|%v", name, colors, p, t, verifiedKeywords)
 		if _, exists := tokenMap[identity]; !exists {
-			// Build filename base: "Name (Keyword1, Keyword2)"
-			fileNameBase := name
-			if len(verifiedKeywords) > 0 {
-				fileNameBase = fmt.Sprintf("%s (%s)", name, strings.Join(verifiedKeywords, ", "))
-			}
-
-			// Determine Category
-			category := "helpers"
-			if contains(token.Types, "Emblem") || strings.Contains(token.TypeLine, "Emblem") {
-				category = "emblems"
-				fileNameBase = strings.ReplaceAll(fileNameBase, "Emblem - ", "")
-				fileNameBase = strings.ReplaceAll(fileNameBase, "Emblem ", "")
-			} else if contains(token.Types, "Creature") {
-				category = "creatures"
-			} else if contains(token.Types, "Artifact") {
-				category = "artifacts"
-			}
-
-			tokenMap[identity] = LeanToken{
-				Name:       name,
-				Category:   category,
-				ColorPath:  colors,
-				PTPath:     fmt.Sprintf("%s_%s", power, toughness),
-				Filename:   fileNameBase,
-				ScryfallID: token.Identifiers.ScryfallID,
-				IsBackFace: token.Side == "b",
-			}
+			tokenMap[identity] = buildLeanToken(name, colors, p, t, verifiedKeywords, token)
 		}
 	}
 }
 
-// streamBulkFile opens AllPrintings.json and runs a custom function on every Set it finds.
-func streamBulkFile(filePath string, processFn func(MTGSet)) error {
-	file, err := os.Open(filePath)
+func buildLeanToken(name, colors, p, t string, keywords []string, raw TokenVersion) LeanToken {
+	fileName := name
+	if len(keywords) > 0 {
+		fileName = fmt.Sprintf("%s (%s)", name, strings.Join(keywords, ", "))
+	}
+
+	category := "helpers"
+	if contains(raw.Types, "Emblem") || strings.Contains(raw.TypeLine, "Emblem") {
+		category = "emblems"
+		fileName = strings.NewReplacer("Emblem - ", "", "Emblem ", "").Replace(fileName)
+	} else if contains(raw.Types, "Creature") {
+		category = "creatures"
+	} else if contains(raw.Types, "Artifact") {
+		category = "artifacts"
+	}
+
+	return LeanToken{
+		Name:       name,
+		Category:   category,
+		ColorPath:  colors,
+		PTPath:     fmt.Sprintf("%s_%s", p, t),
+		Filename:   fileName,
+		ScryfallID: raw.Identifiers.ScryfallID,
+		IsBackFace: raw.Side == "b",
+	}
+}
+
+func processUpdates(cancelChan <-chan struct{}, processFn func(MTGSet)) error {
+	updatesDir := filepath.Join(config.DataDir, "updates")
+	entries, err := os.ReadDir(updatesDir)
 	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	if err := advanceToData(decoder); err != nil {
-		return err
+		return nil
 	}
 
-	decoder.Token() // Consume '{'
-	for decoder.More() {
-		decoder.Token() // Read set code
-		var set MTGSet
-		if err := decoder.Decode(&set); err == nil {
-			processFn(set) 
+	for _, entry := range entries {
+		select {
+		case <-cancelChan:
+			return context.Canceled
+		default:
+		}
+
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			path := filepath.Join(updatesDir, entry.Name())
+			if err := streamUpdateFile(path, cancelChan, processFn); err != nil {
+				if IsRootCancellation(err) {
+					return err
+				}
+				log.Warn().Err(err).Str("file", entry.Name()).Msg("failed to parse update file")
+			}
 		}
 	}
 	return nil
 }
 
-// streamUpdateFile opens a single [SET].json and runs a custom function on it.
-func streamUpdateFile(filePath string, processFn func(MTGSet)) error {
-	file, err := os.Open(filePath)
+type byteCounter struct {
+	io.Reader
+	tracker    *ProgressTracker
+	callback   SyncCallback
+	cancelChan <-chan struct{}
+	title      string
+	current    int64
+	lastUpdate time.Time
+}
+
+func (bc *byteCounter) Read(p []byte) (int, error) {
+	select {
+	case <-bc.cancelChan:
+		return 0, context.Canceled
+	default:
+	}
+
+	n, err := bc.Reader.Read(p)
+	bc.current += int64(n)
+
+	if time.Since(bc.lastUpdate) > 200*time.Millisecond {
+		progress, etaStr := bc.tracker.GetETA(float64(bc.current))
+		bc.callback(bc.title, etaStr, progress, false)
+		bc.lastUpdate = time.Now()
+	}
+	return n, err
+}
+
+func streamBulkFile(path string, title string, cancelChan <-chan struct{}, callback SyncCallback, fn func(MTGSet)) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	stat, _ := file.Stat()
+	decoder := json.NewDecoder(&byteCounter{
+		Reader:     file,
+		tracker:    NewTracker(float64(stat.Size())),
+		callback:   callback,
+		cancelChan: cancelChan,
+		title:      title,
+	})
+
+	if err := advanceToData(decoder); err != nil {
+		return err
+	}
+
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+
+	for decoder.More() {
+		if _, err := decoder.Token(); err != nil {
+			return err
+		}
+		var set MTGSet
+		if err := decoder.Decode(&set); err == nil {
+			fn(set)
+		}
+	}
+	return nil
+}
+
+func streamUpdateFile(path string, cancelChan <-chan struct{}, fn func(MTGSet)) error {
+	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
@@ -302,22 +327,37 @@ func streamUpdateFile(filePath string, processFn func(MTGSet)) error {
 
 	var set MTGSet
 	if err := decoder.Decode(&set); err == nil {
-		processFn(set) 
+		select {
+		case <-cancelChan:
+			return context.Canceled
+		default:
+			fn(set)
+		}
 	}
 	return nil
 }
 
-// advanceToData is a helper to advance the JSON stream to the "data" root key.
 func advanceToData(decoder *json.Decoder) error {
 	for {
 		t, err := decoder.Token()
 		if err != nil {
-			return fmt.Errorf("failed to find 'data' key: %w", err)
+			return err
 		}
 		if key, ok := t.(string); ok && key == "data" {
 			return nil
 		}
 	}
+}
+
+func verifyKeywords(text string, keywords []string) []string {
+	lowerText := strings.ToLower(text)
+	var verified []string
+	for _, kw := range keywords {
+		if strings.Contains(lowerText, strings.ToLower(kw)) {
+			verified = append(verified, kw)
+		}
+	}
+	return verified
 }
 
 func contains(slice []string, val string) bool {

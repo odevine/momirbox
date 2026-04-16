@@ -62,3 +62,25 @@ func Roll(cmc int, printer hardware.Printer) error {
 	// Process and output directly via the printer interface
 	return printer.PrintImage(img)
 }
+
+// HasValidImages checks if a given CMC directory exists and contains at least one image.
+func HasValidImages(cmc int) bool {
+	cmcStr := fmt.Sprintf("%d", cmc)
+	cmcDir := filepath.Join(config.CreaturesDir, cmcStr)
+
+	entries, err := os.ReadDir(cmcDir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" {
+			return true // Found at least one valid image!
+		}
+	}
+	return false
+}

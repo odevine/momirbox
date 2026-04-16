@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"momirbox/internal/config"
+	"momirbox/internal/momir"
 	"momirbox/internal/mtgdb"
 )
 
@@ -22,8 +23,8 @@ type MenuItem struct {
 }
 
 type Menu struct {
-	Title string
-	Items []MenuItem
+	Title      string
+	Items      []MenuItem
 	IsVertical bool
 }
 
@@ -35,16 +36,29 @@ func BuildMenuTree() *Menu {
 	// Generate CMC selection for Momir Basic (0 through 16)
 	momirSubmenu := &Menu{
 		Title: "Select CMC",
-		Items: make([]MenuItem, 17),
+		Items: make([]MenuItem, 0),
 	}
+	
 	for i := 0; i < 17; i++ {
 		cmc := i
-		momirSubmenu.Items[i] = MenuItem{
-			Icon: fmt.Sprintf("cmc_%d.png", cmc),
-			Action: func(app *App) {
-				go app.PlayGamblingSequence(cmc)
-			},
+		// Add the menu item if the folder has images
+		if momir.HasValidImages(cmc) {
+			momirSubmenu.Items = append(momirSubmenu.Items, MenuItem{
+				Icon: fmt.Sprintf("cmc_%d.png", cmc),
+				Action: func(app *App) {
+					go app.PlayGamblingSequence(cmc)
+				},
+			})
 		}
+	}
+
+	if len(momirSubmenu.Items) == 0 {
+		momirSubmenu.Items = append(momirSubmenu.Items, MenuItem{
+			Label: "No Images Synced",
+			Action: func(app *App) {
+				// Do nothing (for now?)
+			},
+		})
 	}
 
 	settingsSubmenu := &Menu{
@@ -58,8 +72,12 @@ func BuildMenuTree() *Menu {
 				},
 				Adjust: func(app *App, delta int) {
 					newSpeed := config.CurrentPrefs.AnimSpeed + (float64(delta) * 0.05)
-					if newSpeed < 0.05 { newSpeed = 0.05 }
-					if newSpeed > 1.00 { newSpeed = 1.00 }
+					if newSpeed < 0.05 {
+						newSpeed = 0.05
+					}
+					if newSpeed > 1.00 {
+						newSpeed = 1.00
+					}
 					config.CurrentPrefs.AnimSpeed = newSpeed
 				},
 			},
@@ -95,10 +113,11 @@ func BuildMenuTree() *Menu {
 		Items: []MenuItem{
 			{
 				Label: "Update DB",
-				Icon: "update_db.png",
+				Icon:  "update_db.png",
 				Action: func(app *App) {
+					app.cancelChan = make(chan struct{}) // Initialize the kill switch
 					app.StatusChan <- StatusUpdate{Title: "DB Update", Row1: "Starting up...", Progress: 0.0}
-					go mtgdb.UpdateDatabase(func(row1, row2 string, progress float64, isDone bool) {
+					go mtgdb.UpdateDatabase(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
 						app.StatusChan <- StatusUpdate{
 							Title: "DB Update", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
 						}
@@ -107,10 +126,11 @@ func BuildMenuTree() *Menu {
 			},
 			{
 				Label: "Sync Creatures",
-				Icon: "download.png",
+				Icon:  "download.png",
 				Action: func(app *App) {
+					app.cancelChan = make(chan struct{}) // Initialize the kill switch
 					app.StatusChan <- StatusUpdate{Title: "Sync Creatures", Row1: "Starting up...", Progress: 0.0}
-					go mtgdb.SyncCreatures(func(row1, row2 string, progress float64, isDone bool) {
+					go mtgdb.SyncCreatures(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
 						app.StatusChan <- StatusUpdate{
 							Title: "Sync Creatures", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
 						}
@@ -124,10 +144,11 @@ func BuildMenuTree() *Menu {
 	if config.CurrentPrefs.EnableTokens {
 		syncSubmenu.Items = append(syncSubmenu.Items, MenuItem{
 			Label: "Sync Tokens",
-			Icon: "download.png",
+			Icon:  "download.png",
 			Action: func(app *App) {
+				app.cancelChan = make(chan struct{}) // Initialize the kill switch
 				app.StatusChan <- StatusUpdate{Title: "Sync Tokens", Row1: "Starting up...", Progress: 0.0}
-				go mtgdb.SyncTokens(func(row1, row2 string, progress float64, isDone bool) {
+				go mtgdb.SyncTokens(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
 					app.StatusChan <- StatusUpdate{
 						Title: "Sync Tokens", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
 					}
@@ -140,8 +161,8 @@ func BuildMenuTree() *Menu {
 
 	rootItems := []MenuItem{
 		{
-			Label: "Momir Basic",
-			Icon: "momir.png",
+			Label:   "Momir Basic",
+			Icon:    "momir.png",
 			Submenu: momirSubmenu,
 		},
 	}
@@ -154,28 +175,30 @@ func BuildMenuTree() *Menu {
 			},
 		}
 		rootItems = append(rootItems, MenuItem{
-			Label: "Tokens",
-			Icon: "token.png",
+			Label:   "Tokens",
+			Icon:    "token.png",
 			Submenu: tokensSubmenu,
 		})
 	}
 
 	rootItems = append(rootItems, MenuItem{
-		Label: "Sync",
-		Icon: "sync.png",
+		Label:   "Sync",
+		Icon:    "sync.png",
 		Submenu: syncSubmenu,
 	})
 
 	rootItems = append(rootItems, MenuItem{
-		Label: "Settings",
-		Icon: "settings.png",
+		Label:   "Settings",
+		Icon:    "settings.png",
 		Submenu: settingsSubmenu,
 	})
 
 	rootItems = append(rootItems, MenuItem{
 		Label: "Power Off",
-		Icon: "power.png",
-		Action: func(app *App) { app.PowerOff() },
+		Icon:  "power.png",
+		Action: func(app *App) {
+			app.PowerOff()
+		},
 	})
 
 	return &Menu{
