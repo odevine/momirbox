@@ -47,7 +47,7 @@ func (p *ThermalPrinter) PrintImage(img image.Image) error {
 	bounds := img.Bounds()
 	originalWidth := bounds.Dx()
 	originalHeight := bounds.Dy()
-	
+
 	printerWidth := 384 // Native dot width for standard 58mm paper
 	aspectRatio := float64(originalHeight) / float64(originalWidth)
 	newHeight := int(float64(printerWidth) * aspectRatio)
@@ -77,7 +77,7 @@ func convertToESCPOS(img *image.RGBA) []byte {
 	height := bounds.Dy()
 
 	// Calculate bytes per line; 8 pixels are packed into 1 byte
-	widthBytes := (width + 7) / 8 
+	widthBytes := (width + 7) / 8
 
 	var buffer bytes.Buffer
 
@@ -97,7 +97,7 @@ func convertToESCPOS(img *image.RGBA) []byte {
 				if x < width {
 					c := img.At(x, y)
 					grayColor := color.GrayModel.Convert(c).(color.Gray)
-					
+
 					// Simple 50% threshold for monochrome conversion
 					if grayColor.Y < 128 {
 						b |= 1 << (7 - bit)

@@ -38,7 +38,7 @@ func BuildMenuTree() *Menu {
 		Title: "Select CMC",
 		Items: make([]MenuItem, 0),
 	}
-	
+
 	for i := 0; i < 17; i++ {
 		cmc := i
 		// Add the menu item if the folder has images

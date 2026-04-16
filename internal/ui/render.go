@@ -85,25 +85,25 @@ func (app *App) renderVerticalList(img *image.RGBA) {
 
 		item := app.currentMenu.Items[itemIndex]
 		yPos := Theme.VerticalStartY + (i * Theme.VerticalRowHeight)
-		
+
 		if itemIndex == app.currentIndex {
 			bgRect := image.Rect(0, yPos-Theme.VerticalHighlightTop, config.ScreenWidth, yPos+Theme.VerticalHighlightBot)
 			draw.Draw(img, bgRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-			
+
 			valStr := item.GetValue()
 			if app.IsEditing {
 				valStr = "< " + valStr + " >"
 			}
-			
+
 			drawString(img, Theme.VerticalTextX, yPos, item.Label, ColorBlack)
-			
+
 			valWidth := font.MeasureString(PixelFont, valStr).Ceil()
 			valX := Theme.VerticalRightMargin - valWidth
 			drawString(img, valX, yPos, valStr, ColorBlack)
 
 		} else {
 			drawString(img, Theme.VerticalTextX, yPos, item.Label, ColorWhite)
-			
+
 			if item.GetValue != nil {
 				valStr := item.GetValue()
 				valWidth := font.MeasureString(PixelFont, valStr).Ceil()
@@ -138,7 +138,7 @@ func (app *App) renderHorizontalCarousel(img *image.RGBA) {
 					textWidth := font.MeasureString(PixelFont, item.Label).Ceil()
 					textX -= (textWidth / 2)
 				}
-				
+
 				drawString(img, textX, Theme.CarouselTextY, item.Label, ColorWhite)
 			} else {
 				if iconImg != nil {
@@ -156,7 +156,7 @@ func (app *App) renderHorizontalCarousel(img *image.RGBA) {
 func (app *App) renderMenuToImage(img *image.RGBA) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
-	// Animate the visual index 
+	// Animate the visual index
 	app.visualIndex += (float64(app.currentIndex) - app.visualIndex) * config.CurrentPrefs.AnimSpeed
 
 	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, config.ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
@@ -186,13 +186,13 @@ func (app *App) renderStatusToImage(img *image.RGBA, status StatusUpdate) {
 
 	if status.Progress > 0 {
 		barWidth := int(float64(Theme.ProgressBarWidth) * status.Progress)
-		
+
 		outerRect := image.Rect(Theme.ProgressBarX, Theme.ProgressBarY, Theme.ProgressBarX+Theme.ProgressBarWidth+2, Theme.ProgressBarY+Theme.ProgressBarHeight)
 		innerRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+Theme.ProgressBarWidth+1, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
-		
+
 		draw.Draw(img, outerRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 		draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-		
+
 		if barWidth > 0 {
 			fillRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+1+barWidth, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
 			draw.Draw(img, fillRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
@@ -208,7 +208,7 @@ func (app *App) renderStatus(status StatusUpdate) {
 
 func (app *App) renderConfirmModal() {
 	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
-	
+
 	// Draw the background loading screen
 	app.renderStatusToImage(img, app.lastStatus)
 
@@ -237,7 +237,7 @@ func (app *App) renderConfirmModal() {
 
 func drawString(img *image.RGBA, x, y int, label string, col color.Color) {
 	if PixelFont == nil {
-		return 
+		return
 	}
 
 	d := &font.Drawer{
@@ -253,7 +253,7 @@ func getIcon(filename string) image.Image {
 	if filename == "" {
 		return nil
 	}
-	
+
 	if img, ok := iconCache[filename]; ok {
 		return img
 	}

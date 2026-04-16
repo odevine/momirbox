@@ -42,10 +42,10 @@ func (app *App) PlayGamblingSequence(cmc int) {
 	for _, word := range words {
 		img := image.NewRGBA(image.Rect(0, 0, 128, 64))
 		draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-		
-		x := 64 - (len(word) * 3) 
+
+		x := 64 - (len(word) * 3)
 		drawString(img, x, 35, word, ColorWhite)
-		
+
 		app.display.DrawFrame(img)
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -75,7 +75,7 @@ func (app *App) PlayGamblingSequence(cmc int) {
 		app.renderMenuToImage(img)
 		draw.Draw(img, image.Rect(0, 0, 128, step), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 		draw.Draw(img, image.Rect(0, 64-step, 128, 64), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-		
+
 		app.display.DrawFrame(img)
 		time.Sleep(config.FrameDelay)
 	}
@@ -87,7 +87,7 @@ func (app *App) PlayGamblingSequence(cmc int) {
 func (app *App) playGIF(path string) {
 	file, err := os.Open(path)
 	if err != nil {
-		return 
+		return
 	}
 	defer file.Close()
 
@@ -108,10 +108,10 @@ func (app *App) playGIF(path string) {
 	for loop := 0; loop < 10; loop++ {
 		for i, frame := range scaledFrames {
 			app.display.DrawFrame(frame)
-			
+
 			delay := g.Delay[i]
 			if delay < 2 {
-				delay = 10 
+				delay = 10
 			}
 			time.Sleep(time.Duration(delay) * 10 * time.Millisecond)
 		}

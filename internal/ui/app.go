@@ -42,9 +42,9 @@ type App struct {
 	currentIndex int
 
 	// Cancellation state
-	lastStatus   StatusUpdate
-	confirmYes   bool
-	cancelChan   chan struct{}
+	lastStatus StatusUpdate
+	confirmYes bool
+	cancelChan chan struct{}
 
 	// Concurrency
 	StatusChan chan StatusUpdate
@@ -82,12 +82,12 @@ func (app *App) Run() {
 
 		case status := <-app.StatusChan:
 			app.lastStatus = status
-			
+
 			if status.IsDone {
 				app.currentState = StateMenu
 				app.currentMenu = BuildMenuTree()
 				app.menuStack = nil
-				app.indexStack = nil 
+				app.indexStack = nil
 				app.currentIndex = 0
 			} else if app.currentState != StateConfirmCancel {
 				app.currentState = StateStatusOverlay

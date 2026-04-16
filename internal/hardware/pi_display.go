@@ -55,7 +55,7 @@ func NewPiDisplay() (*PiDisplay, error) {
 
 // Draw pushes the 128x64 image buffer to the physical hardware.
 func (p *PiDisplay) DrawFrame(img image.Image) error {
-  return p.dev.Draw(p.dev.Bounds(), img, image.Point{})
+	return p.dev.Draw(p.dev.Bounds(), img, image.Point{})
 }
 
 func (p *PiDisplay) Close() error {
@@ -63,10 +63,10 @@ func (p *PiDisplay) Close() error {
 		// Create a blank, completely black 128x64 image
 		blackImg := image.NewRGBA(image.Rect(0, 0, 128, 64))
 		draw.Draw(blackImg, blackImg.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
-		
+
 		// Push the black frame to clear the screen
 		p.DrawFrame(blackImg)
-		
+
 		// Halt the device hardware
 		return p.dev.Halt()
 	}

@@ -31,7 +31,7 @@ func InitPrefs() {
 		}
 	}
 	// Synchronize the file with current memory state to ensure all keys exist
-	SavePrefs() 
+	SavePrefs()
 }
 
 // SavePrefs persists the current configuration to a JSON file
@@ -43,7 +43,7 @@ func SavePrefs() {
 		return
 	}
 	defer file.Close()
-	
+
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "    ")
 	encoder.Encode(&CurrentPrefs)

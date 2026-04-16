@@ -24,17 +24,17 @@ func NewEmulator() *Emulator {
 	// Scaled up for visibility on high-resolution displays
 	ebiten.SetWindowSize(128*4, 64*4)
 	ebiten.SetWindowTitle("MomirBox OLED Emulator")
-	
+
 	return &Emulator{
-		inputQueue: make(chan InputAction, 10), 
+		inputQueue: make(chan InputAction, 10),
 	}
 }
 
 func (e *Emulator) DrawFrame(img image.Image) error {
-  e.mu.Lock()
-  defer e.mu.Unlock()
-  e.currentFrame = ebiten.NewImageFromImage(img)
-  return nil
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.currentFrame = ebiten.NewImageFromImage(img)
+	return nil
 }
 
 func (e *Emulator) Close() error {
@@ -80,13 +80,13 @@ func (e *Emulator) Update() error {
 }
 
 func (e *Emulator) Draw(screen *ebiten.Image) {
-  e.mu.Lock()
-  defer e.mu.Unlock()
-  if e.currentFrame != nil {
-	  screen.DrawImage(e.currentFrame, &ebiten.DrawImageOptions{})
-  }
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.currentFrame != nil {
+		screen.DrawImage(e.currentFrame, &ebiten.DrawImageOptions{})
+	}
 }
 
 func (e *Emulator) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 128, 64 
+	return 128, 64
 }

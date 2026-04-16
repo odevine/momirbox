@@ -17,17 +17,17 @@ func init() {
 }
 
 var (
-	BaseDir      = "."
-	DataDir      = filepath.Join(BaseDir, "data")
-	AssetsDir    = filepath.Join(BaseDir, "assets")
-	IconsDir     = filepath.Join(AssetsDir, "icons")
-	
+	BaseDir   = "."
+	DataDir   = filepath.Join(BaseDir, "data")
+	AssetsDir = filepath.Join(BaseDir, "assets")
+	IconsDir  = filepath.Join(AssetsDir, "icons")
+
 	ImagesDir    = filepath.Join(DataDir, "images")
 	CreaturesDir = filepath.Join(ImagesDir, "creatures")
 	TokensDir    = filepath.Join(ImagesDir, "tokens")
-	
-	PrefsFile    = filepath.Join(DataDir, "preferences.json")
-	LeanDBFile   = filepath.Join(DataDir, "lean_db.json")
+
+	PrefsFile  = filepath.Join(DataDir, "preferences.json")
+	LeanDBFile = filepath.Join(DataDir, "lean_db.json")
 )
 
 const (

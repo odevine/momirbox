@@ -142,7 +142,7 @@ func downloadAsset(client *http.Client, item MissingFile, cancelChan <-chan stru
 	}
 
 	targetURL := fmt.Sprintf("https://cards.scryfall.io/normal/front/%c/%c/%s.jpg", id[0], id[1], id)
-	
+
 	for retries := 0; retries < MaxRetries; retries++ {
 		ctx, cancel := CreateCancelContext(cancelChan)
 		req, _ := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
@@ -167,7 +167,7 @@ func downloadAsset(client *http.Client, item MissingFile, cancelChan <-chan stru
 			cancel()
 			return success
 		}
-		
+
 		resp.Body.Close()
 		cancel()
 

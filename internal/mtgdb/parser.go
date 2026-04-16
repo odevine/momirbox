@@ -185,8 +185,12 @@ func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
 		}
 
 		p, t := token.Power, token.Toughness
-		if p == "" { p = "?" }
-		if t == "" { t = "?" }
+		if p == "" {
+			p = "?"
+		}
+		if t == "" {
+			t = "?"
+		}
 
 		identity := fmt.Sprintf("%s|%s|%s|%s|%v", name, colors, p, t, verifiedKeywords)
 		if _, exists := tokenMap[identity]; !exists {

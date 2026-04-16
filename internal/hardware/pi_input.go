@@ -48,13 +48,24 @@ func NewPiInput() (*PiInput, error) {
 		return nil
 	}
 
-	if err := initButton(config.PinEncoderCen, InputSelect); err != nil { return nil, err }
-	if err := initButton(config.PinBackBtn, InputBack); err != nil { return nil, err }
-	if err := initButton(config.PinEncoderUp, InputUp); err != nil { return nil, err }
-	if err := initButton(config.PinEncoderRgt, InputRight); err != nil { return nil, err }
-	if err := initButton(config.PinEncoderDwn, InputDown); err != nil { return nil, err }
-	if err := initButton(config.PinEncoderLft, InputLeft); err != nil { return nil, err }
-
+	if err := initButton(config.PinEncoderCen, InputSelect); err != nil {
+		return nil, err
+	}
+	if err := initButton(config.PinBackBtn, InputBack); err != nil {
+		return nil, err
+	}
+	if err := initButton(config.PinEncoderUp, InputUp); err != nil {
+		return nil, err
+	}
+	if err := initButton(config.PinEncoderRgt, InputRight); err != nil {
+		return nil, err
+	}
+	if err := initButton(config.PinEncoderDwn, InputDown); err != nil {
+		return nil, err
+	}
+	if err := initButton(config.PinEncoderLft, InputLeft); err != nil {
+		return nil, err
+	}
 
 	pi.encA = gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderA))
 	pi.encB = gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderB))
