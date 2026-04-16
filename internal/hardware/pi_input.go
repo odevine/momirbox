@@ -10,36 +10,63 @@ import (
 	"periph.io/x/conn/v3/gpio/gpioreg"
 )
 
-// PiInput handles physical GPIO interactions on the Raspberry Pi.
+const (
+	buttonDebounce  = 200 * time.Millisecond
+	encoderDebounce = 30 * time.Millisecond
+)
+
+type button struct {
+	pin      gpio.PinIn
+	action   InputAction
+	lastTime time.Time
+}
+
 type PiInput struct {
 	inputQueue chan InputAction
 	quitChan   chan struct{}
+
+	encA    gpio.PinIn
+	encB    gpio.PinIn
+	lastEnc time.Time
+
+	buttons []*button
 }
 
-// NewPiInput initializes GPIO pins and starts the background monitoring loop.
 func NewPiInput() (*PiInput, error) {
 	pi := &PiInput{
 		inputQueue: make(chan InputAction, 10),
 		quitChan:   make(chan struct{}),
 	}
 
-	// Reference pins by their BCM numbering from the global config
-	pinEncA := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderA))
-	pinEncB := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderB))
-	pinSelect := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderCen))
-	pinBack := gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinBackBtn))
-
-	if pinEncA == nil || pinEncB == nil || pinSelect == nil || pinBack == nil {
-		return nil, fmt.Errorf("failed to locate one or more GPIO pins")
+	initButton := func(pinNum int, action InputAction) error {
+		pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", pinNum))
+		if pin == nil {
+			return fmt.Errorf("failed to locate GPIO%d", pinNum)
+		}
+		pin.In(gpio.PullUp, gpio.FallingEdge)
+		pi.buttons = append(pi.buttons, &button{pin: pin, action: action})
+		return nil
 	}
 
-	// Initialize pins with internal pull-up resistors to prevent floating states
-	pinEncA.In(gpio.PullUp, gpio.BothEdges)
-	pinEncB.In(gpio.PullUp, gpio.NoEdge)
-	pinSelect.In(gpio.PullUp, gpio.FallingEdge)
-	pinBack.In(gpio.PullUp, gpio.FallingEdge)
+	if err := initButton(config.PinEncoderCen, InputSelect); err != nil { return nil, err }
+	if err := initButton(config.PinBackBtn, InputBack); err != nil { return nil, err }
+	if err := initButton(config.PinEncoderUp, InputUp); err != nil { return nil, err }
+	if err := initButton(config.PinEncoderRgt, InputRight); err != nil { return nil, err }
+	if err := initButton(config.PinEncoderDwn, InputDown); err != nil { return nil, err }
+	if err := initButton(config.PinEncoderLft, InputLeft); err != nil { return nil, err }
 
-	go pi.watchHardware(pinEncA, pinEncB, pinSelect, pinBack)
+
+	pi.encA = gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderA))
+	pi.encB = gpioreg.ByName(fmt.Sprintf("GPIO%d", config.PinEncoderB))
+
+	if pi.encA == nil || pi.encB == nil {
+		return nil, fmt.Errorf("failed to locate encoder GPIO pins")
+	}
+
+	pi.encA.In(gpio.PullUp, gpio.BothEdges)
+	pi.encB.In(gpio.PullUp, gpio.NoEdge)
+
+	go pi.watchHardware()
 
 	return pi, nil
 }
@@ -58,38 +85,29 @@ func (p *PiInput) Close() error {
 	return nil
 }
 
-// watchHardware runs in a goroutine to process electrical signals into application events.
-func (p *PiInput) watchHardware(pinA, pinB, pinSel, pinBack gpio.PinIn) {
-	var lastSel, lastBack time.Time
-
+func (p *PiInput) watchHardware() {
 	for {
 		select {
 		case <-p.quitChan:
 			return
 		default:
-			// Handle Rotary Encoder rotation via quadrature decoding
-			if pinA.WaitForEdge(10 * time.Millisecond) {
-				aState := pinA.Read()
-				bState := pinB.Read()
-				
-				if aState == bState {
-					p.inputQueue <- InputRight
-				} else {
-					p.inputQueue <- InputLeft
+			if p.encA.WaitForEdge(10 * time.Millisecond) {
+				if time.Since(p.lastEnc) > encoderDebounce {
+					if p.encA.Read() == p.encB.Read() {
+						p.inputQueue <- InputRight
+					} else {
+						p.inputQueue <- InputLeft
+					}
+					p.lastEnc = time.Now()
 				}
-				// Basic mechanical debounce to prevent erratic scrolling
-				time.Sleep(50 * time.Millisecond) 
 			}
 
-			// Process button presses with a 200ms software debounce
-			if pinSel.Read() == gpio.Low && time.Since(lastSel) > 200*time.Millisecond {
-				p.inputQueue <- InputSelect
-				lastSel = time.Now()
-			}
-
-			if pinBack.Read() == gpio.Low && time.Since(lastBack) > 200*time.Millisecond {
-				p.inputQueue <- InputBack
-				lastBack = time.Now()
+			now := time.Now()
+			for _, b := range p.buttons {
+				if b.pin.Read() == gpio.Low && now.Sub(b.lastTime) > buttonDebounce {
+					p.inputQueue <- b.action
+					b.lastTime = now
+				}
 			}
 		}
 	}

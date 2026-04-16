@@ -50,7 +50,7 @@ const (
 	PinEncoderCen = 5
 	PinEncoderUp  = 19
 	PinEncoderDwn = 6
-	PinEncodeLft  = 26
+	PinEncoderLft = 26
 	PinEncoderRgt = 13
 	PinDisplayDC  = 9
 	PinDisplayRST = 27

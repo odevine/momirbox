@@ -3,6 +3,8 @@ package hardware
 import (
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"time"
 
 	"periph.io/x/conn/v3/gpio"
@@ -58,6 +60,14 @@ func (p *PiDisplay) DrawFrame(img image.Image) error {
 
 func (p *PiDisplay) Close() error {
 	if p.dev != nil {
+		// Create a blank, completely black 128x64 image
+		blackImg := image.NewRGBA(image.Rect(0, 0, 128, 64))
+		draw.Draw(blackImg, blackImg.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
+		
+		// Push the black frame to clear the screen
+		p.DrawFrame(blackImg)
+		
+		// Halt the device hardware
 		return p.dev.Halt()
 	}
 	return nil
