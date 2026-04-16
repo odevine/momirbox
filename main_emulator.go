@@ -1,3 +1,5 @@
+//go:build !pi
+
 package main
 
 import (
@@ -6,7 +8,6 @@ import (
 
 	"momirbox/internal/config"
 	"momirbox/internal/hardware"
-	"momirbox/internal/printer"
 	"momirbox/internal/ui"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -21,38 +22,7 @@ func main() {
 	}
 
 	ui.LoadFonts()
-
-	if config.IsRaspberryPi {
-		runPhysicalHardware()
-	} else {
-		runEmulator(themePath)
-	}
-}
-
-func runPhysicalHardware() {
-	fmt.Println("Starting MomirBox on Raspberry Pi Hardware...")
-
-	display, err := hardware.NewPiDisplay()
-	if err != nil {
-		panic(err)
-	}
-	defer display.Close()
-
-	input, err := hardware.NewPiInput()
-	if err != nil {
-		panic(err)
-	}
-	defer input.Close()
-
-	// Standard serial port for Pi Zero UART communication
-	thermalPrinter, err := printer.NewThermalPrinter("/dev/serial0")
-	if err != nil {
-		panic(err)
-	}
-	defer thermalPrinter.Close()
-
-	app := ui.NewApp(display, input, thermalPrinter)
-	app.Run()
+	runEmulator(themePath)
 }
 
 func runEmulator(themePath string) {
