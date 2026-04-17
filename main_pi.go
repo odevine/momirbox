@@ -18,7 +18,7 @@ import (
 func main() {
 	config.InitPrefs()
 
-	themePath := filepath.Join(config.AssetsDir, "theme.json") 
+	themePath := filepath.Join(config.AssetsDir, "theme.json")
 	if err := ui.LoadTheme(themePath); err != nil {
 		fmt.Printf("Warning: Could not load theme.json: %v\n", err)
 	}
@@ -51,7 +51,7 @@ func runPhysicalHardware() {
 
 	app := ui.NewApp(display, input, thermalPrinter)
 
-  sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
@@ -61,4 +61,3 @@ func runPhysicalHardware() {
 
 	app.Run()
 }
-

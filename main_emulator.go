@@ -16,7 +16,7 @@ import (
 func main() {
 	config.InitPrefs()
 
-	themePath := filepath.Join(config.AssetsDir, "theme.json") 
+	themePath := filepath.Join(config.AssetsDir, "theme.json")
 	if err := ui.LoadTheme(themePath); err != nil {
 		fmt.Printf("Warning: Could not load theme.json: %v\n", err)
 	}

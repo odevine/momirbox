@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"momirbox/internal/hardware"
@@ -49,6 +50,9 @@ type App struct {
 	// Concurrency
 	StatusChan chan StatusUpdate
 	quitChan   chan struct{}
+
+	// Render Locking
+	renderMu sync.Mutex
 }
 
 // NewApp creates and initializes a new App instance with the provided hardware interfaces.

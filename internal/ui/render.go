@@ -129,8 +129,6 @@ func (app *App) renderHorizontalCarousel(img *image.RGBA) {
 			if i == app.currentIndex {
 				if iconImg != nil {
 					xdraw.NearestNeighbor.Scale(img, iconRect, iconImg, iconImg.Bounds(), draw.Over, nil)
-				} else {
-					draw.Draw(img, iconRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 				}
 
 				textX := xPos + (Theme.CarouselIconSize / 2)
@@ -170,6 +168,8 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 }
 
 func (app *App) renderMenu() {
+	app.renderMu.Lock()
+	defer app.renderMu.Unlock()
 	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	app.renderMenuToImage(img)
 	app.display.DrawFrame(img)
@@ -201,12 +201,18 @@ func (app *App) renderStatusToImage(img *image.RGBA, status StatusUpdate) {
 }
 
 func (app *App) renderStatus(status StatusUpdate) {
+	app.renderMu.Lock()
+	defer app.renderMu.Unlock()
+
 	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	app.renderStatusToImage(img, status)
 	app.display.DrawFrame(img)
 }
 
 func (app *App) renderConfirmModal() {
+	app.renderMu.Lock()
+	defer app.renderMu.Unlock()
+
 	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 
 	// Draw the background loading screen

@@ -27,6 +27,7 @@ func (app *App) PlayGamblingSequence(cmc int) {
 	}
 
 	for step := 0; step <= 34; step += stepSize {
+		app.renderMu.Lock()
 		img := image.NewRGBA(image.Rect(0, 0, 128, 64))
 		app.renderMenuToImage(img)
 
@@ -34,12 +35,14 @@ func (app *App) PlayGamblingSequence(cmc int) {
 		draw.Draw(img, image.Rect(0, 64-step, 128, 64), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 		app.display.DrawFrame(img)
+		app.renderMu.Unlock()
 		time.Sleep(config.FrameDelay)
 	}
 
 	// 2. Text Sequence: Flash the catchphrase words sequentially
 	words := []string{"LETS", "GO...", "GAMBLING!!!"}
 	for _, word := range words {
+		app.renderMu.Lock()
 		img := image.NewRGBA(image.Rect(0, 0, 128, 64))
 		draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
@@ -47,6 +50,7 @@ func (app *App) PlayGamblingSequence(cmc int) {
 		drawString(img, x, 35, word, ColorWhite)
 
 		app.display.DrawFrame(img)
+		app.renderMu.Unlock()
 		time.Sleep(500 * time.Millisecond)
 	}
 
@@ -71,12 +75,14 @@ func (app *App) PlayGamblingSequence(cmc int) {
 
 	// 5. Shutter Open: Bars retract to reveal the menu
 	for step := 34; step >= 0; step -= stepSize {
+		app.renderMu.Lock()
 		img := image.NewRGBA(image.Rect(0, 0, 128, 64))
 		app.renderMenuToImage(img)
 		draw.Draw(img, image.Rect(0, 0, 128, step), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 		draw.Draw(img, image.Rect(0, 64-step, 128, 64), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
 		app.display.DrawFrame(img)
+		app.renderMu.Unlock()
 		time.Sleep(config.FrameDelay)
 	}
 
@@ -107,7 +113,9 @@ func (app *App) playGIF(path string) {
 	// Repeat the GIF for a fixed duration of loops
 	for loop := 0; loop < 10; loop++ {
 		for i, frame := range scaledFrames {
+			app.renderMu.Lock()
 			app.display.DrawFrame(frame)
+			app.renderMu.Unlock()
 
 			delay := g.Delay[i]
 			if delay < 2 {
