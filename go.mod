@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
+	github.com/rs/zerolog v1.35.0
 	go.bug.st/serial v1.6.4
 	golang.org/x/image v0.39.0
 	periph.io/x/conn/v3 v3.7.3
@@ -19,7 +20,6 @@ require (
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
-	github.com/rs/zerolog v1.35.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
