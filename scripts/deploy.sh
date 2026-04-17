@@ -19,12 +19,12 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo "--- Building for Raspberry Pi (ARMv7) ---"
-GOOS=linux GOARCH=arm GOARM=7 go build -tags pi -o $APP_NAME .
+GOOS=linux GOARCH=arm GOARM=7 go build -tags pi -o $APP_NAME ../
 
 echo "--- Syncing Assets and Binary ---"
 ssh $PI_USER@$PI_HOST "mkdir -p $PI_DEST"
 scp $APP_NAME $PI_USER@$PI_HOST:$PI_DEST/
-rsync -avz assets/ $PI_USER@$PI_HOST:$PI_DEST/assets/
+rsync -avz ../assets/ $PI_USER@$PI_HOST:$PI_DEST/assets/
 
 echo "--- Done! ---"
 
