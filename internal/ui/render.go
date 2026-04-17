@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	_ "image/png"
 	"os"
 	"path/filepath"
 
@@ -172,72 +173,6 @@ func (app *App) renderMenu() {
 	defer app.renderMu.Unlock()
 	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	app.renderMenuToImage(img)
-	app.display.DrawFrame(img)
-}
-
-func (app *App) renderStatusToImage(img *image.RGBA, status StatusUpdate) {
-	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-
-	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, status.Title, ColorWhite)
-	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, config.ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-
-	drawString(img, Theme.HeaderTextX, Theme.StatusRow1Y, status.Row1, ColorWhite)
-	drawString(img, Theme.HeaderTextX, Theme.StatusRow2Y, status.Row2, ColorWhite)
-
-	if status.Progress > 0 {
-		barWidth := int(float64(Theme.ProgressBarWidth) * status.Progress)
-
-		outerRect := image.Rect(Theme.ProgressBarX, Theme.ProgressBarY, Theme.ProgressBarX+Theme.ProgressBarWidth+2, Theme.ProgressBarY+Theme.ProgressBarHeight)
-		innerRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+Theme.ProgressBarWidth+1, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
-
-		draw.Draw(img, outerRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-		draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-
-		if barWidth > 0 {
-			fillRect := image.Rect(Theme.ProgressBarX+1, Theme.ProgressBarY+1, Theme.ProgressBarX+1+barWidth, Theme.ProgressBarY+Theme.ProgressBarHeight-1)
-			draw.Draw(img, fillRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-		}
-	}
-}
-
-func (app *App) renderStatus(status StatusUpdate) {
-	app.renderMu.Lock()
-	defer app.renderMu.Unlock()
-
-	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
-	app.renderStatusToImage(img, status)
-	app.display.DrawFrame(img)
-}
-
-func (app *App) renderConfirmModal() {
-	app.renderMu.Lock()
-	defer app.renderMu.Unlock()
-
-	img := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
-
-	// Draw the background loading screen
-	app.renderStatusToImage(img, app.lastStatus)
-
-	// Draw the Modal box centered on the screen
-	modalRect := image.Rect(16, 12, 112, 52)
-	innerRect := image.Rect(18, 14, 110, 50)
-	draw.Draw(img, modalRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
-	draw.Draw(img, innerRect, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
-
-	// Draw text
-	drawString(img, 24, 26, "Cancel Sync?", ColorWhite)
-
-	yesText := "  YES  "
-	noText := "  NO  "
-	if app.confirmYes {
-		yesText = "> YES <"
-	} else {
-		noText = "> NO <"
-	}
-
-	drawString(img, 20, 44, yesText, ColorWhite)
-	drawString(img, 72, 44, noText, ColorWhite)
-
 	app.display.DrawFrame(img)
 }
 

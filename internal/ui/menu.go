@@ -5,14 +5,18 @@ import (
 
 	"momirbox/internal/config"
 	"momirbox/internal/momir"
-	"momirbox/internal/mtgdb"
 )
 
+// ActionFunc represents a callback triggered by selecting a menu item.
 type ActionFunc func(app *App)
+
+// AdjustFunc represents a callback for modifying a numerical or boolean setting.
 type AdjustFunc func(app *App, delta int)
+
+// GetValueFunc retrieves the display string for a configurable setting.
 type GetValueFunc func() string
 
-// MenuItem represents a single entry in a menu, which can either trigger an action or open a submenu.
+// MenuItem represents a single entry in a menu.
 type MenuItem struct {
 	Label    string
 	Icon     string
@@ -22,18 +26,15 @@ type MenuItem struct {
 	GetValue GetValueFunc
 }
 
+// Menu acts as a container for a list of MenuItems.
 type Menu struct {
 	Title      string
 	Items      []MenuItem
 	IsVertical bool
 }
 
-// BuildMenuTree constructs the application's navigation hierarchy based on current preferences.
-// It is called recursively to rebuild the UI when settings like 'Enable Tokens' are toggled.
+// BuildMenuTree constructs the application's top-level navigation hierarchy.
 func BuildMenuTree() *Menu {
-	// --- Submenus ---
-
-	// Generate CMC selection for Momir Basic (0 through 16)
 	momirSubmenu := &Menu{
 		Title: "Select CMC",
 		Items: make([]MenuItem, 0),
@@ -41,7 +42,6 @@ func BuildMenuTree() *Menu {
 
 	for i := 0; i < 17; i++ {
 		cmc := i
-		// Add the menu item if the folder has images
 		if momir.HasValidImages(cmc) {
 			momirSubmenu.Items = append(momirSubmenu.Items, MenuItem{
 				Icon: fmt.Sprintf("cmc_%d.png", cmc),
@@ -54,10 +54,8 @@ func BuildMenuTree() *Menu {
 
 	if len(momirSubmenu.Items) == 0 {
 		momirSubmenu.Items = append(momirSubmenu.Items, MenuItem{
-			Label: "No Images Synced",
-			Action: func(app *App) {
-				// Do nothing (for now?)
-			},
+			Label:  "No Images Synced",
+			Action: func(app *App) {},
 		})
 	}
 
@@ -108,57 +106,6 @@ func BuildMenuTree() *Menu {
 		},
 	}
 
-	syncSubmenu := &Menu{
-		Title: "Sync",
-		Items: []MenuItem{
-			{
-				Label: "Update DB",
-				Icon:  "update_db.png",
-				Action: func(app *App) {
-					app.cancelChan = make(chan struct{}) // Initialize the kill switch
-					app.StatusChan <- StatusUpdate{Title: "DB Update", Row1: "Starting up...", Progress: 0.0}
-					go mtgdb.UpdateDatabase(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
-						app.StatusChan <- StatusUpdate{
-							Title: "DB Update", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
-						}
-					})
-				},
-			},
-			{
-				Label: "Sync Creatures",
-				Icon:  "download.png",
-				Action: func(app *App) {
-					app.cancelChan = make(chan struct{}) // Initialize the kill switch
-					app.StatusChan <- StatusUpdate{Title: "Sync Creatures", Row1: "Starting up...", Progress: 0.0}
-					go mtgdb.SyncCreatures(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
-						app.StatusChan <- StatusUpdate{
-							Title: "Sync Creatures", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
-						}
-					})
-				},
-			},
-		},
-	}
-
-	// Conditionally add Token synchronization if enabled in preferences
-	if config.CurrentPrefs.EnableTokens {
-		syncSubmenu.Items = append(syncSubmenu.Items, MenuItem{
-			Label: "Sync Tokens",
-			Icon:  "download.png",
-			Action: func(app *App) {
-				app.cancelChan = make(chan struct{}) // Initialize the kill switch
-				app.StatusChan <- StatusUpdate{Title: "Sync Tokens", Row1: "Starting up...", Progress: 0.0}
-				go mtgdb.SyncTokens(app.cancelChan, func(row1, row2 string, progress float64, isDone bool) {
-					app.StatusChan <- StatusUpdate{
-						Title: "Sync Tokens", Row1: row1, Row2: row2, Progress: progress, IsDone: isDone,
-					}
-				})
-			},
-		})
-	}
-
-	// --- Root Menu Construction ---
-
 	rootItems := []MenuItem{
 		{
 			Label:   "Momir Basic",
@@ -180,12 +127,6 @@ func BuildMenuTree() *Menu {
 			Submenu: tokensSubmenu,
 		})
 	}
-
-	rootItems = append(rootItems, MenuItem{
-		Label:   "Sync",
-		Icon:    "sync.png",
-		Submenu: syncSubmenu,
-	})
 
 	rootItems = append(rootItems, MenuItem{
 		Label:   "Settings",

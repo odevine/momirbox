@@ -2,9 +2,6 @@ package momir
 
 import (
 	"fmt"
-	"image"
-	_ "image/jpeg" // Register JPEG decoder
-	_ "image/png"  // Register PNG decoder
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -14,56 +11,43 @@ import (
 	"momirbox/internal/hardware"
 )
 
-// Roll selects a random card image for a given CMC and sends it to the printer.
-// This replaces the original roll_momir and process_and_spool_image functions.
+// Roll selects a random pre-processed binary file for a given CMC and sends it to the printer.
 func Roll(cmc int, printer hardware.Printer) error {
 	cmcStr := fmt.Sprintf("%d", cmc)
 	cmcDir := filepath.Join(config.CreaturesDir, cmcStr)
 
-	// Verify the directory exists for the requested CMC
 	entries, err := os.ReadDir(cmcDir)
 	if err != nil {
 		return fmt.Errorf("directory not found for CMC %d; ensure images are synced", cmc)
 	}
 
-	// Filter for supported image formats
-	var validImages []string
+	var validFiles []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" {
-			validImages = append(validImages, entry.Name())
+		if strings.ToLower(filepath.Ext(entry.Name())) == ".bin" {
+			validFiles = append(validFiles, entry.Name())
 		}
 	}
 
-	if len(validImages) == 0 {
-		return fmt.Errorf("no valid images found for CMC %d", cmc)
+	if len(validFiles) == 0 {
+		return fmt.Errorf("no valid binary files found for CMC %d", cmc)
 	}
 
-	// Select a random image from the pool
-	chosenFile := validImages[rand.Intn(len(validImages))]
+	chosenFile := validFiles[rand.Intn(len(validFiles))]
 	chosenPath := filepath.Join(cmcDir, chosenFile)
 	fmt.Printf("Rolled CMC %d: %s\n", cmc, chosenFile)
 
-	file, err := os.Open(chosenPath)
+	data, err := os.ReadFile(chosenPath)
 	if err != nil {
-		return fmt.Errorf("failed to open image: %w", err)
-	}
-	defer file.Close()
-
-	// Decode the file into a standard image.Image for processing
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return fmt.Errorf("failed to decode image: %w", err)
+		return fmt.Errorf("failed to read binary file: %w", err)
 	}
 
-	// Process and output directly via the printer interface
-	return printer.PrintImage(img)
+	return printer.PrintRaw(data)
 }
 
-// HasValidImages checks if a given CMC directory exists and contains at least one image.
+// HasValidImages checks if a given CMC directory exists and contains at least one binary file.
 func HasValidImages(cmc int) bool {
 	cmcStr := fmt.Sprintf("%d", cmc)
 	cmcDir := filepath.Join(config.CreaturesDir, cmcStr)
@@ -77,9 +61,8 @@ func HasValidImages(cmc int) bool {
 		if entry.IsDir() {
 			continue
 		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext == ".jpg" || ext == ".jpeg" || ext == ".png" {
-			return true // Found at least one valid image!
+		if strings.ToLower(filepath.Ext(entry.Name())) == ".bin" {
+			return true
 		}
 	}
 	return false
