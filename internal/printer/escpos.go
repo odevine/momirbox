@@ -14,7 +14,7 @@ type ThermalPrinter struct {
 // NewThermalPrinter initializes a serial connection to the thermal printer.
 func NewThermalPrinter(devicePath string) (*ThermalPrinter, error) {
 	mode := &serial.Mode{
-		BaudRate: 9600,
+		BaudRate: 115200,
 		Parity:   serial.NoParity,
 		DataBits: 8,
 		StopBits: serial.OneStopBit,

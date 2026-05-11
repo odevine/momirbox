@@ -8,12 +8,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"momirbox/internal/config"
-
-	"github.com/rs/zerolog/log"
 )
 
 // MTGSetMeta represents basic set metadata used for synchronization tracking.
@@ -35,54 +32,44 @@ const (
 )
 
 // UpdateDatabase synchronizes the local card database with MTGJSON.
-// It performs a bulk download if no database exists, otherwise it fetches incremental updates.
-func UpdateDatabase(cancelChan <-chan struct{}, callback SyncCallback) {
-	callback("Checking DB...", "Contacting MTGJSON...", 0.1, false)
-
+func UpdateDatabase(ctx context.Context) error {
 	updatesDir := filepath.Join(config.DataDir, "updates")
 	_ = os.MkdirAll(updatesDir, os.ModePerm)
 
 	trackedSetsPath := filepath.Join(config.DataDir, "tracked_sets.json")
 	allPrintingsPath := filepath.Join(config.DataDir, "AllPrintings.json")
 
-	setList, err := fetchSetList(cancelChan)
+	setList, err := fetchSetList(ctx)
 	if err != nil {
-		handleUpdateError(err, callback)
-		return
+		return fmt.Errorf("failed to fetch set list: %w", err)
 	}
 
 	trackedSets := loadTrackedSets(trackedSetsPath)
 	missingSets := filterMissingSets(setList.Data, trackedSets)
 
 	if len(missingSets) == 0 {
-		completeSync("DB Up To Date!", callback)
-		return
+		return nil // Up to date
 	}
 
-	// Scenario: Full Refresh (Base DB missing or tracking is empty)
+	// Full Refresh
 	if len(trackedSets) == 0 || !FileExists(allPrintingsPath) {
-		if err := performBulkDownload(allPrintingsPath, cancelChan, callback); err != nil {
-			handleUpdateError(err, callback)
-			return
+		if err := performBulkDownload(ctx, allPrintingsPath); err != nil {
+			return fmt.Errorf("bulk download failed: %w", err)
 		}
 		SaveTrackedSets(trackedSetsPath, setList.Data)
-		completeSync("Update Complete!", callback)
-		return
+		return nil
 	}
 
-	// Scenario: Incremental Catch-up
-	if err := performIncrementalUpdate(missingSets, updatesDir, trackedSetsPath, trackedSets, cancelChan, callback); err != nil {
-		handleUpdateError(err, callback)
-		return
+	// Incremental Catch-up
+	if err := performIncrementalUpdate(ctx, missingSets, updatesDir, trackedSetsPath, trackedSets); err != nil {
+		return fmt.Errorf("incremental update failed: %w", err)
 	}
 
-	completeSync("Update Complete!", callback)
+	return nil
 }
 
-func fetchSetList(cancelChan <-chan struct{}) (*SetListResponse, error) {
+func fetchSetList(ctx context.Context) (*SetListResponse, error) {
 	client := &http.Client{Timeout: RequestTimeout}
-	ctx, cancel := CreateCancelContext(cancelChan)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", SetListURL, nil)
 	if err != nil {
@@ -107,12 +94,8 @@ func fetchSetList(cancelChan <-chan struct{}) (*SetListResponse, error) {
 	return &sl, nil
 }
 
-func performBulkDownload(dest string, cancelChan <-chan struct{}, callback SyncCallback) error {
-	callback("Initial Setup", "Downloading bulk DB...", 0.2, false)
-
+func performBulkDownload(ctx context.Context, dest string) error {
 	client := &http.Client{Timeout: BulkTimeout}
-	ctx, cancel := CreateCancelContext(cancelChan)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", AllPrintingsURL, nil)
 	if err != nil {
@@ -126,23 +109,13 @@ func performBulkDownload(dest string, cancelChan <-chan struct{}, callback SyncC
 	}
 	defer resp.Body.Close()
 
-	// Use temporary file for atomic transition
 	tmpPath := dest + ".tmp"
 	out, err := os.Create(tmpPath)
 	if err != nil {
 		return err
 	}
 
-	pr := &progressReader{
-		Reader:     resp.Body,
-		Total:      resp.ContentLength,
-		Tracker:    NewTracker(float64(resp.ContentLength)),
-		Callback:   callback,
-		CancelChan: cancelChan,
-		LastUpdate: time.Now(),
-	}
-
-	_, copyErr := io.Copy(out, pr)
+	_, copyErr := io.Copy(out, resp.Body)
 	out.Close()
 
 	if copyErr != nil {
@@ -153,41 +126,28 @@ func performBulkDownload(dest string, cancelChan <-chan struct{}, callback SyncC
 	return os.Rename(tmpPath, dest)
 }
 
-func performIncrementalUpdate(codes []string, dir, trackPath string, tracked map[string]bool, cancelChan <-chan struct{}, callback SyncCallback) error {
+func performIncrementalUpdate(ctx context.Context, codes []string, dir, trackPath string, tracked map[string]bool) error {
 	client := &http.Client{Timeout: RequestTimeout}
 
-	for i, code := range codes {
+	for _, code := range codes {
 		select {
-		case <-cancelChan:
-			return context.Canceled
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
 		}
 
-		progress := float64(i+1) / float64(len(codes))
-		callback(fmt.Sprintf("Fetching %s...", code), fmt.Sprintf("Set %d of %d", i+1, len(codes)), progress, false)
-
-		if err := downloadSetFile(client, code, dir, cancelChan); err != nil {
-			if IsRootCancellation(err) {
-				return err
-			}
-			log.Error().Err(err).Str("set", code).Msg("incremental download failed")
-			continue
+		if err := downloadSetFile(ctx, client, code, dir); err != nil {
+			return err
 		}
 
 		tracked[code] = true
 		SaveTrackedSetsMap(trackPath, tracked)
-
-		if !wait(100*time.Millisecond, cancelChan) {
-			return context.Canceled
-		}
+		time.Sleep(100 * time.Millisecond) // Play nice with the MTGJSON API
 	}
 	return nil
 }
 
-func downloadSetFile(client *http.Client, code, dir string, cancelChan <-chan struct{}) error {
-	ctx, cancel := CreateCancelContext(cancelChan)
-	defer cancel()
-
+func downloadSetFile(ctx context.Context, client *http.Client, code, dir string) error {
 	url := fmt.Sprintf("https://mtgjson.com/api/v5/%s.json", code)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -268,63 +228,4 @@ func filterMissingSets(sets []MTGSetMeta, tracked map[string]bool) []string {
 		}
 	}
 	return missing
-}
-
-func handleUpdateError(err error, callback SyncCallback) {
-	if IsRootCancellation(err) {
-		log.Info().Msg("update aborted by user")
-		callback("", "", 0.0, true)
-		return
-	}
-
-	log.Error().Err(err).Msg("database update failed")
-	callback("Update Failed!", err.Error(), 0.0, false)
-	time.Sleep(2 * time.Second)
-	callback("", "", 0.0, true)
-}
-
-type progressReader struct {
-	io.Reader
-	Total      int64
-	Downloaded int64
-	Tracker    *ProgressTracker
-	Callback   SyncCallback
-	CancelChan <-chan struct{}
-	LastUpdate time.Time
-}
-
-func (pr *progressReader) Read(p []byte) (int, error) {
-	select {
-	case <-pr.CancelChan:
-		return 0, context.Canceled
-	default:
-	}
-
-	n, err := pr.Reader.Read(p)
-	pr.Downloaded += int64(n)
-
-	if time.Since(pr.LastUpdate) > 100*time.Millisecond || pr.Downloaded == pr.Total {
-		pr.updateProgress()
-		pr.LastUpdate = time.Now()
-	}
-
-	return n, err
-}
-
-func (pr *progressReader) updateProgress() {
-	mbDown := float64(pr.Downloaded) / (1024 * 1024)
-	var progress float64
-	var row2 string
-
-	if pr.Total > 0 {
-		var etaStr string
-		progress, etaStr = pr.Tracker.GetETA(float64(pr.Downloaded))
-		shortETA := strings.TrimPrefix(etaStr, "ETA: ")
-		row2 = fmt.Sprintf("%.1f MB | %s", mbDown, shortETA)
-	} else {
-		row2 = fmt.Sprintf("%.1f MB...", mbDown)
-		progress = 0.5
-	}
-
-	pr.Callback("Downloading DB...", row2, progress, false)
 }
