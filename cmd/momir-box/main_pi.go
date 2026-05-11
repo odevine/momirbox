@@ -30,6 +30,11 @@ func main() {
 func runPhysicalHardware() {
 	fmt.Println("Starting MomirBox on Raspberry Pi Hardware...")
 
+	ups, err := hardware.NewUPS()
+	if err != nil {
+		panic(err)
+	}
+
 	display, err := hardware.NewPiDisplay()
 	if err != nil {
 		panic(err)
@@ -49,14 +54,14 @@ func runPhysicalHardware() {
 	}
 	defer thermalPrinter.Close()
 
-	app := ui.NewApp(display, input, thermalPrinter)
+	app := ui.NewApp(display, input, ups, thermalPrinter)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
 		fmt.Println("\nShutting down gracefully...")
-		app.PowerOff()
+		app.Quit()
 	}()
 
 	app.Run()

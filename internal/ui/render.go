@@ -92,7 +92,7 @@ func (app *App) renderVerticalList(img *image.RGBA) {
 			draw.Draw(img, bgRect, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 
 			valStr := item.GetValue()
-			if app.IsEditing {
+			if app.IsEditing && !item.IsReadOnly {
 				valStr = "< " + valStr + " >"
 			}
 
@@ -152,6 +152,40 @@ func (app *App) renderHorizontalCarousel(img *image.RGBA) {
 	}
 }
 
+func drawBatteryIcon(img *image.RGBA, x, y int, pct float64, charging bool) {
+	width := 14
+	height := 8
+
+	// 1. Draw main battery outline
+	outline := image.Rect(x, y, x+width, y+height)
+	draw.Draw(img, outline, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+
+	// 2. Hollow out the inside
+	inner := image.Rect(x+1, y+1, x+width-1, y+height-1)
+	draw.Draw(img, inner, &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
+
+	// 3. Draw the battery nub on the right
+	nub := image.Rect(x+width, y+2, x+width+2, y+height-2)
+	draw.Draw(img, nub, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+
+	// 4. Fill based on percentage
+	fillWidth := int((pct / 100.0) * float64(width-2))
+	if fillWidth > 0 {
+		fill := image.Rect(x+1, y+1, x+1+fillWidth, y+height-1)
+		draw.Draw(img, fill, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	}
+
+	// 5. Draw a tiny '+' to the left if charging
+	if charging {
+		cx := x - 5
+		cy := y + (height / 2)
+		hLine := image.Rect(cx-1, cy, cx+2, cy+1)
+		vLine := image.Rect(cx, cy-1, cx+1, cy+2)
+		draw.Draw(img, hLine, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+		draw.Draw(img, vLine, &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
+	}
+}
+
 func (app *App) renderMenuToImage(img *image.RGBA) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{ColorBlack}, image.Point{}, draw.Src)
 
@@ -160,6 +194,26 @@ func (app *App) renderMenuToImage(img *image.RGBA) {
 
 	draw.Draw(img, image.Rect(0, Theme.HeaderLineY1, config.ScreenWidth, Theme.HeaderLineY2), &image.Uniform{ColorWhite}, image.Point{}, draw.Src)
 	drawString(img, Theme.HeaderTextX, Theme.HeaderTextY, app.currentMenu.Title, ColorWhite)
+
+	if app.ups != nil {
+		app.batteryMu.Lock()
+		pct := app.batteryPct
+		charging := app.isCharging
+		app.batteryMu.Unlock()
+
+		// Calculate layout coordinates
+		iconWidth := 16 // 14px body + 2px nub
+
+		// 2 pixels of padding from the right edge of the screen
+		iconX := config.ScreenWidth - iconWidth - 2
+
+		// Font drawing uses the baseline for Y, but rectangles use the top-left corner.
+		// Subtracting 7 aligns the 8px tall battery icon perfectly with the title text.
+		iconY := Theme.HeaderTextY - 7
+
+		// Draw just the icon!
+		drawBatteryIcon(img, iconX, iconY, pct, charging)
+	}
 
 	if app.currentMenu.IsVertical {
 		app.renderVerticalList(img)

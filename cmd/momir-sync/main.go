@@ -415,21 +415,6 @@ func deployCmd(ctx context.Context, mode string, p *tea.Program) tea.Cmd {
 		target := fmt.Sprintf("%s@%s:%s", user, host, dest)
 		sshTarget := fmt.Sprintf("%s@%s", user, host)
 
-		// runStreamingCmd := func(c *exec.Cmd) error {
-		// 	stdout, _ := c.StdoutPipe()
-		// 	c.Stderr = c.Stdout
-		// 	if err := c.Start(); err != nil {
-		// 		return err
-		// 	}
-		// 	scanner := bufio.NewScanner(stdout)
-		// 	for scanner.Scan() {
-		// 		if p != nil {
-		// 			p.Send(logLineMsg(scanner.Text()))
-		// 		}
-		// 	}
-		// 	return c.Wait()
-		// }
-
 		runStreamingCmd := func(c *exec.Cmd) error {
 			// Combine Stdout and Stderr so we see compiler/ssh errors
 			output, err := c.CombinedOutput()

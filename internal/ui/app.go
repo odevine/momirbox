@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ const (
 type App struct {
 	display hardware.Display
 	input   hardware.Input
+	ups     *hardware.UPS
 	Printer hardware.Printer
 
 	currentState AppState
@@ -33,13 +35,18 @@ type App struct {
 
 	quitChan chan struct{}
 	renderMu sync.Mutex
+
+	batteryPct float64
+	isCharging bool
+	batteryMu  sync.Mutex
 }
 
 // NewApp creates and initializes a new App instance with the provided hardware interfaces.
-func NewApp(d hardware.Display, i hardware.Input, p hardware.Printer) *App {
+func NewApp(d hardware.Display, i hardware.Input, u *hardware.UPS, p hardware.Printer) *App {
 	return &App{
 		display:      d,
 		input:        i,
+		ups:          u,
 		Printer:      p,
 		currentState: StateSplash,
 		IsEditing:    false,
@@ -50,9 +57,40 @@ func NewApp(d hardware.Display, i hardware.Input, p hardware.Printer) *App {
 // Run starts the main application loop for the UI.
 func (app *App) Run() {
 	app.renderSplash()
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
-	app.currentMenu = BuildMenuTree()
+	// Start the background battery poller for the toolbar
+	if app.ups != nil {
+		// Do an initial read so it isn't 0% for the first 5 seconds
+		pct, _ := app.ups.GetBatteryPercentage()
+		charging, _ := app.ups.IsCharging()
+
+		app.batteryMu.Lock()
+		app.batteryPct = pct
+		app.isCharging = charging
+		app.batteryMu.Unlock()
+
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					newPct, _ := app.ups.GetBatteryPercentage()
+					newCharging, _ := app.ups.IsCharging()
+
+					app.batteryMu.Lock()
+					app.batteryPct = newPct
+					app.isCharging = newCharging
+					app.batteryMu.Unlock()
+				case <-app.quitChan:
+					return
+				}
+			}
+		}()
+	}
+
+	app.currentMenu = BuildMenuTree(app.ups)
 	app.currentState = StateMenu
 
 	for {
@@ -100,7 +138,7 @@ func (app *App) handleInput(action hardware.InputAction) {
 			}
 		}
 	case hardware.InputSelect:
-		if item.Adjust != nil {
+		if item.Adjust != nil && !item.IsReadOnly {
 			app.IsEditing = !app.IsEditing
 		} else if item.Submenu != nil {
 			app.menuStack = append(app.menuStack, app.currentMenu)
@@ -124,7 +162,18 @@ func (app *App) handleInput(action hardware.InputAction) {
 	}
 }
 
-// PowerOff initiates a graceful shutdown of the application loop.
+func (app *App) Quit() {
+	select {
+	case <-app.quitChan: // Already closed
+	default:
+		close(app.quitChan)
+	}
+}
+
+// PowerOff physically shuts down the Raspberry Pi.
 func (app *App) PowerOff() {
-	close(app.quitChan)
+	app.Quit() // Stop the UI loop first so the screen clears
+
+	// Execute the Linux shutdown command
+	_ = exec.Command("sudo", "shutdown", "-h", "now").Run()
 }

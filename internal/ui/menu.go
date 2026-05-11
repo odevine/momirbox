@@ -2,8 +2,11 @@ package ui
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	"momirbox/internal/config"
+	"momirbox/internal/hardware"
 	"momirbox/internal/momir"
 )
 
@@ -18,12 +21,13 @@ type GetValueFunc func() string
 
 // MenuItem represents a single entry in a menu.
 type MenuItem struct {
-	Label    string
-	Icon     string
-	Submenu  *Menu
-	Action   ActionFunc
-	Adjust   AdjustFunc
-	GetValue GetValueFunc
+	Label      string
+	Icon       string
+	Submenu    *Menu
+	Action     ActionFunc
+	Adjust     AdjustFunc
+	GetValue   GetValueFunc
+	IsReadOnly bool
 }
 
 // Menu acts as a container for a list of MenuItems.
@@ -34,7 +38,7 @@ type Menu struct {
 }
 
 // BuildMenuTree constructs the application's top-level navigation hierarchy.
-func BuildMenuTree() *Menu {
+func BuildMenuTree(ups *hardware.UPS) *Menu {
 	momirSubmenu := &Menu{
 		Title: "Select CMC",
 		Items: make([]MenuItem, 0),
@@ -57,6 +61,99 @@ func BuildMenuTree() *Menu {
 			Label:  "No Images Synced",
 			Action: func(app *App) {},
 		})
+	}
+
+	var batterySubmenu *Menu
+	if ups != nil {
+		var (
+			isChg bool
+			pct   float64
+			v     float64
+			mA    float64
+			w     float64
+			mu    sync.Mutex
+		)
+
+		go func() {
+			// Initial read immediately so the UI isn't blank for 5 seconds
+			newIsChg, _ := ups.IsCharging()
+			newPct, _ := ups.GetBatteryPercentage()
+			newV, _ := ups.ReadVoltage()
+			newMA, _ := ups.ReadCurrent()
+			newW, _ := ups.ReadPower()
+
+			mu.Lock()
+			isChg, pct, v, mA, w = newIsChg, newPct, newV, newMA, newW
+			mu.Unlock()
+
+			ticker := time.NewTicker(5 * time.Second)
+			for range ticker.C {
+				newIsChg, _ := ups.IsCharging()
+				newPct, _ := ups.GetBatteryPercentage()
+				newV, _ := ups.ReadVoltage()
+				newMA, _ := ups.ReadCurrent()
+				newW, _ := ups.ReadPower()
+
+				mu.Lock()
+				isChg, pct, v, mA, w = newIsChg, newPct, newV, newMA, newW
+				mu.Unlock()
+			}
+		}()
+
+		batterySubmenu = &Menu{
+			Title:      "Battery",
+			IsVertical: true,
+			Items: []MenuItem{
+				{
+					Label:      "Status",
+					IsReadOnly: true,
+					GetValue: func() string {
+						mu.Lock()
+						defer mu.Unlock()
+						if isChg {
+							return "Charging"
+						}
+						return "On Battery"
+					},
+				},
+				{
+					Label:      "Percentage",
+					IsReadOnly: true,
+					GetValue: func() string {
+						mu.Lock()
+						defer mu.Unlock()
+						return fmt.Sprintf("%.1f%%", pct)
+					},
+				},
+				{
+					Label:      "Voltage",
+					IsReadOnly: true,
+					GetValue: func() string {
+						mu.Lock()
+						defer mu.Unlock()
+						return fmt.Sprintf("%.2f V", v)
+					},
+				},
+				{
+					Label:      "Current",
+					IsReadOnly: true,
+					GetValue: func() string {
+						mu.Lock()
+						defer mu.Unlock()
+						return fmt.Sprintf("%.0f mA", mA)
+					},
+				},
+				{
+					Label:      "Power",
+					IsReadOnly: true,
+					GetValue: func() string {
+						mu.Lock()
+						defer mu.Unlock()
+						return fmt.Sprintf("%.2f W", w)
+					},
+				},
+			},
+		}
 	}
 
 	settingsSubmenu := &Menu{
@@ -125,6 +222,14 @@ func BuildMenuTree() *Menu {
 			Label:   "Tokens",
 			Icon:    "token.png",
 			Submenu: tokensSubmenu,
+		})
+	}
+
+	if batterySubmenu != nil {
+		rootItems = append(rootItems, MenuItem{
+			Label:   "Battery",
+			Icon:    "settings.png",
+			Submenu: batterySubmenu,
 		})
 	}
 
