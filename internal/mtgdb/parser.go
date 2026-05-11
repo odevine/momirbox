@@ -4,15 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"momirbox/internal/config"
-
-	"github.com/rs/zerolog/log"
 )
 
 // CardVersion represents the MTGJSON v5 schema for a card within a set.
@@ -77,7 +73,7 @@ type MTGSet struct {
 }
 
 // ParseAllPrintingsCreatures aggregates legal creatures from bulk and update files.
-func ParseAllPrintingsCreatures(cancelChan <-chan struct{}, callback SyncCallback) ([]LeanCreature, error) {
+func ParseAllPrintingsCreatures(ctx context.Context) ([]LeanCreature, error) {
 	creatureMap := make(map[string]LeanCreature)
 	allPrintingsPath := filepath.Join(config.DataDir, "AllPrintings.json")
 
@@ -85,14 +81,13 @@ func ParseAllPrintingsCreatures(cancelChan <-chan struct{}, callback SyncCallbac
 		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
-	err := streamBulkFile(allPrintingsPath, "Parsing Creatures...", cancelChan, callback, func(set MTGSet) {
+	if err := streamBulkFile(ctx, allPrintingsPath, func(set MTGSet) {
 		processSet(set, creatureMap)
-	})
-	if err != nil && !IsRootCancellation(err) {
-		log.Warn().Err(err).Msg("failed to parse bulk creatures")
+	}); err != nil {
+		return nil, err
 	}
 
-	if err := processUpdates(cancelChan, func(set MTGSet) {
+	if err := processUpdates(ctx, func(set MTGSet) {
 		processSet(set, creatureMap)
 	}); err != nil {
 		return nil, err
@@ -106,7 +101,7 @@ func ParseAllPrintingsCreatures(cancelChan <-chan struct{}, callback SyncCallbac
 }
 
 // ParseAllPrintingsTokens aggregates unique tokens from bulk and update files.
-func ParseAllPrintingsTokens(cancelChan <-chan struct{}, callback SyncCallback) ([]LeanToken, error) {
+func ParseAllPrintingsTokens(ctx context.Context) ([]LeanToken, error) {
 	tokenMap := make(map[string]LeanToken)
 	allPrintingsPath := filepath.Join(config.DataDir, "AllPrintings.json")
 
@@ -114,14 +109,13 @@ func ParseAllPrintingsTokens(cancelChan <-chan struct{}, callback SyncCallback) 
 		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
-	err := streamBulkFile(allPrintingsPath, "Parsing Tokens...", cancelChan, callback, func(set MTGSet) {
+	if err := streamBulkFile(ctx, allPrintingsPath, func(set MTGSet) {
 		processTokens(set, tokenMap)
-	})
-	if err != nil && !IsRootCancellation(err) {
-		log.Warn().Err(err).Msg("failed to parse bulk tokens")
+	}); err != nil {
+		return nil, err
 	}
 
-	if err := processUpdates(cancelChan, func(set MTGSet) {
+	if err := processUpdates(ctx, func(set MTGSet) {
 		processTokens(set, tokenMap)
 	}); err != nil {
 		return nil, err
@@ -226,7 +220,7 @@ func buildLeanToken(name, colors, p, t string, keywords []string, raw TokenVersi
 	}
 }
 
-func processUpdates(cancelChan <-chan struct{}, processFn func(MTGSet)) error {
+func processUpdates(ctx context.Context, processFn func(MTGSet)) error {
 	updatesDir := filepath.Join(config.DataDir, "updates")
 	entries, err := os.ReadDir(updatesDir)
 	if err != nil {
@@ -235,68 +229,27 @@ func processUpdates(cancelChan <-chan struct{}, processFn func(MTGSet)) error {
 
 	for _, entry := range entries {
 		select {
-		case <-cancelChan:
-			return context.Canceled
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
 		}
 
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
 			path := filepath.Join(updatesDir, entry.Name())
-			if err := streamUpdateFile(path, cancelChan, processFn); err != nil {
-				if IsRootCancellation(err) {
-					return err
-				}
-				log.Warn().Err(err).Str("file", entry.Name()).Msg("failed to parse update file")
-			}
+			_ = streamUpdateFile(path, processFn)
 		}
 	}
 	return nil
 }
 
-type byteCounter struct {
-	io.Reader
-	tracker    *ProgressTracker
-	callback   SyncCallback
-	cancelChan <-chan struct{}
-	title      string
-	current    int64
-	lastUpdate time.Time
-}
-
-func (bc *byteCounter) Read(p []byte) (int, error) {
-	select {
-	case <-bc.cancelChan:
-		return 0, context.Canceled
-	default:
-	}
-
-	n, err := bc.Reader.Read(p)
-	bc.current += int64(n)
-
-	if time.Since(bc.lastUpdate) > 200*time.Millisecond {
-		progress, etaStr := bc.tracker.GetETA(float64(bc.current))
-		bc.callback(bc.title, etaStr, progress, false)
-		bc.lastUpdate = time.Now()
-	}
-	return n, err
-}
-
-func streamBulkFile(path string, title string, cancelChan <-chan struct{}, callback SyncCallback, fn func(MTGSet)) error {
+func streamBulkFile(ctx context.Context, path string, fn func(MTGSet)) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	stat, _ := file.Stat()
-	decoder := json.NewDecoder(&byteCounter{
-		Reader:     file,
-		tracker:    NewTracker(float64(stat.Size())),
-		callback:   callback,
-		cancelChan: cancelChan,
-		title:      title,
-	})
-
+	decoder := json.NewDecoder(file)
 	if err := advanceToData(decoder); err != nil {
 		return err
 	}
@@ -306,6 +259,12 @@ func streamBulkFile(path string, title string, cancelChan <-chan struct{}, callb
 	}
 
 	for decoder.More() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if _, err := decoder.Token(); err != nil {
 			return err
 		}
@@ -317,7 +276,7 @@ func streamBulkFile(path string, title string, cancelChan <-chan struct{}, callb
 	return nil
 }
 
-func streamUpdateFile(path string, cancelChan <-chan struct{}, fn func(MTGSet)) error {
+func streamUpdateFile(path string, fn func(MTGSet)) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -331,12 +290,7 @@ func streamUpdateFile(path string, cancelChan <-chan struct{}, fn func(MTGSet)) 
 
 	var set MTGSet
 	if err := decoder.Decode(&set); err == nil {
-		select {
-		case <-cancelChan:
-			return context.Canceled
-		default:
-			fn(set)
-		}
+		fn(set)
 	}
 	return nil
 }

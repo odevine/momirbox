@@ -1,23 +1,19 @@
 package mtgdb
 
 import (
+	"context"
 	"fmt"
-	"io"
+	"image"
+	_ "image/jpeg"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"momirbox/internal/config"
-
-	"github.com/rs/zerolog/log"
+	"momirbox/internal/converter"
 )
 
-// SyncCallback provides a hook for the UI to receive real-time progress updates.
-type SyncCallback func(row1, row2 string, progress float64, isDone bool)
-
-// MissingFile represents a card asset that needs to be fetched from a remote source.
 type MissingFile struct {
 	Name       string
 	Path       string
@@ -26,29 +22,16 @@ type MissingFile struct {
 	IsBackFace bool
 }
 
-const (
-	MaxRetries     = 3
-	RetryDelay     = 5 * time.Second
-	RateLimitDelay = 35 * time.Second
-	DiskWritePause = 150 * time.Millisecond
-)
-
-// SyncCreatures identifies missing creature images and downloads them from Scryfall.
-func SyncCreatures(cancelChan <-chan struct{}, callback SyncCallback) {
-	callback("Parsing DB...", "", 0.0, false)
-
-	momirList, err := ParseAllPrintingsCreatures(cancelChan, callback)
+func GetMissingCreatures(ctx context.Context) ([]MissingFile, error) {
+	momirList, err := ParseAllPrintingsCreatures(ctx)
 	if err != nil {
-		handleSyncError(err, callback)
-		return
+		return nil, err
 	}
-
-	callback(fmt.Sprintf("Creatures: %d", len(momirList)), "Checking files...", 0.0, false)
 
 	var missing []MissingFile
 	for _, card := range momirList {
 		cmcDir := filepath.Join(config.CreaturesDir, fmt.Sprintf("%d", card.CMC))
-		filePath := filepath.Join(cmcDir, SanitizeForFilename(card.Name)+".jpg")
+		filePath := filepath.Join(cmcDir, SanitizeForFilename(card.Name)+".bin")
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			missing = append(missing, MissingFile{
@@ -60,30 +43,19 @@ func SyncCreatures(cancelChan <-chan struct{}, callback SyncCallback) {
 		}
 	}
 
-	if len(missing) == 0 {
-		completeSync("All Images Synced!", callback)
-		return
-	}
-
-	processDownloadQueue(missing, "Syncing Creatures...", cancelChan, callback)
+	return missing, nil
 }
 
-// SyncTokens identifies missing token images and handles double-faced variants.
-func SyncTokens(cancelChan <-chan struct{}, callback SyncCallback) {
-	callback("Parsing DB...", "Tokens...", 0.0, false)
-
-	tokenList, err := ParseAllPrintingsTokens(cancelChan, callback)
+func GetMissingTokens(ctx context.Context) ([]MissingFile, error) {
+	tokenList, err := ParseAllPrintingsTokens(ctx)
 	if err != nil {
-		handleSyncError(err, callback)
-		return
+		return nil, err
 	}
-
-	callback(fmt.Sprintf("Tokens: %d", len(tokenList)), "Checking files...", 0.0, false)
 
 	var missing []MissingFile
 	for _, token := range tokenList {
 		saveDir := resolveTokenDir(token)
-		filePath := filepath.Join(saveDir, SanitizeForFilename(token.Filename)+".jpg")
+		filePath := filepath.Join(saveDir, SanitizeForFilename(token.Filename)+".bin")
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			missing = append(missing, MissingFile{
@@ -96,112 +68,50 @@ func SyncTokens(cancelChan <-chan struct{}, callback SyncCallback) {
 		}
 	}
 
-	if len(missing) == 0 {
-		completeSync("All Tokens Synced!", callback)
-		return
-	}
-
-	processDownloadQueue(missing, "Syncing Tokens...", cancelChan, callback)
+	return missing, nil
 }
 
-func processDownloadQueue(queue []MissingFile, label string, cancelChan <-chan struct{}, callback SyncCallback) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	tracker := NewTracker(float64(len(queue)))
-
-	for i, item := range queue {
-		select {
-		case <-cancelChan:
-			callback("", "", 0.0, true)
-			return
-		default:
-		}
-
-		progress, etaStr := tracker.GetETA(float64(i + 1))
-		row2 := fmt.Sprintf("%d/%d | %s", i+1, len(queue), etaStr)
-		callback(label, row2, progress, false)
-
-		_ = os.MkdirAll(item.Dir, os.ModePerm)
-
-		if !downloadAsset(client, item, cancelChan) {
-			log.Warn().Str("card", item.Name).Msg("failed to acquire asset after retries")
-		}
-
-		if !wait(DiskWritePause, cancelChan) {
-			callback("", "", 0.0, true)
-			return
-		}
-	}
-
-	completeSync("All Downloads Done!", callback)
-}
-
-func downloadAsset(client *http.Client, item MissingFile, cancelChan <-chan struct{}) bool {
-	id := item.ScryfallID
-	if len(id) < 2 {
+func DownloadAndConvert(client *http.Client, item MissingFile, settings converter.DitherSettings, noiseImg image.Image) bool {
+	if len(item.ScryfallID) < 2 {
 		return false
 	}
 
-	targetURL := fmt.Sprintf("https://cards.scryfall.io/normal/front/%c/%c/%s.jpg", id[0], id[1], id)
+	targetURL := fmt.Sprintf("https://cards.scryfall.io/normal/front/%c/%c/%s.jpg", item.ScryfallID[0], item.ScryfallID[1], item.ScryfallID)
 
-	for retries := 0; retries < MaxRetries; retries++ {
-		ctx, cancel := CreateCancelContext(cancelChan)
-		req, _ := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
-		req.Header.Set("User-Agent", config.UserAgent)
-		req.Header.Set("Accept", "image/jpeg")
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", config.UserAgent)
+	req.Header.Set("Accept", "image/jpeg")
 
-		resp, err := client.Do(req)
-		if err != nil {
-			cancel()
-			if IsRootCancellation(err) {
-				return false
-			}
-			if !wait(RetryDelay, cancelChan) {
-				return false
-			}
-			continue
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			success := saveToDisk(item.Path, resp.Body)
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
 			resp.Body.Close()
-			cancel()
-			return success
 		}
-
-		resp.Body.Close()
-		cancel()
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			log.Warn().Str("card", item.Name).Msg("scryfall rate limit triggered")
-			if !wait(RateLimitDelay, cancelChan) {
-				return false
-			}
-			continue
-		}
-
 		return false
 	}
-	return false
-}
+	defer resp.Body.Close()
 
-func saveToDisk(path string, body io.Reader) bool {
-	tmpPath := path + ".tmp"
-	file, err := os.Create(tmpPath)
+	img, _, err := image.Decode(resp.Body)
 	if err != nil {
 		return false
 	}
 
-	if _, err := io.Copy(file, body); err != nil {
-		file.Close()
-		_ = os.Remove(tmpPath)
+	_ = os.MkdirAll(item.Dir, os.ModePerm)
+
+	ditheredGray := converter.DitherImage(img, config.PrinterWidth, settings, noiseImg)
+	binData := converter.ImageToESCPOS(ditheredGray)
+
+	tmpPath := item.Path + ".tmp"
+	if err := os.WriteFile(tmpPath, binData, 0644); err != nil {
 		return false
 	}
-	file.Close()
 
-	return os.Rename(tmpPath, path) == nil
+	return os.Rename(tmpPath, item.Path) == nil
 }
 
-// SanitizeForFilename strips invalid characters for cross-platform filesystem safety.
 func SanitizeForFilename(name string) string {
 	var builder strings.Builder
 	for _, r := range name {
@@ -218,30 +128,4 @@ func resolveTokenDir(token LeanToken) string {
 		return filepath.Join(base, token.ColorPath, SanitizeForFilename(token.PTPath))
 	}
 	return base
-}
-
-func handleSyncError(err error, callback SyncCallback) {
-	if IsRootCancellation(err) {
-		callback("", "", 0.0, true)
-		return
-	}
-	log.Error().Err(err).Msg("sync process failed")
-	callback("Sync Failed!", err.Error(), 0.0, false)
-	time.Sleep(2 * time.Second)
-	callback("", "", 0.0, true)
-}
-
-func wait(d time.Duration, cancelChan <-chan struct{}) bool {
-	select {
-	case <-time.After(d):
-		return true
-	case <-cancelChan:
-		return false
-	}
-}
-
-func completeSync(msg string, callback SyncCallback) {
-	callback(msg, "", 1.0, false)
-	time.Sleep(2 * time.Second)
-	callback("", "", 1.0, true)
 }

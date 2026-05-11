@@ -12,21 +12,20 @@ fi
 cleanup() {
     echo -e "\n--- Stopping $APP_NAME on Raspberry Pi ---"
     ssh $PI_USER@$PI_HOST "pkill $APP_NAME" > /dev/null 2>&1
-    echo "App terminated. Exiting."
     exit 0
 }
 
 trap cleanup SIGINT SIGTERM
 
-echo "--- Building for Raspberry Pi (ARMv7) ---"
-GOOS=linux GOARCH=arm GOARM=7 go build -tags pi -o $APP_NAME ../
+echo "--- Building for Raspberry Pi ---"
+GOOS=linux GOARCH=arm64 go build -tags pi -o ../bin/$APP_NAME ../cmd/momirbox
 
-echo "--- Syncing Assets and Binary ---"
-ssh $PI_USER@$PI_HOST "mkdir -p $PI_DEST"
-scp $APP_NAME $PI_USER@$PI_HOST:$PI_DEST/
+echo "--- Deploying to Pi ---"
+ssh -A $PI_USER@$PI_HOST "mkdir -p $PI_DEST"
+scp ../bin/$APP_NAME $PI_USER@$PI_HOST:$PI_DEST/
+
+# Sync assets but skip the heavy data directory (handled by sync_images.sh)
 rsync -avz ../assets/ $PI_USER@$PI_HOST:$PI_DEST/assets/
 
-echo "--- Done! ---"
-
-echo "--- Launching App (Press Ctrl+C here to stop it) ---"
-ssh -t $PI_USER@$PI_HOST "pkill $APP_NAME || true; cd $PI_DEST && ./$APP_NAME 2>&1 | tee momirbox.log"
+echo "--- Launching App ---"
+ssh -t $PI_USER@$PI_HOST "pkill $APP_NAME || true; cd $PI_DEST && ./$APP_NAME"

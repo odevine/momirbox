@@ -5,25 +5,22 @@ cd "$(dirname "$0")"
 if [ -f ../.env ]; then
     export $(cat ../.env | xargs)
 else
-    echo ".env file not found!"
+    echo ".env file not found at root!"
     exit 1
 fi
 
-# Relative path to local data directory
-LOCAL_DATA_DIR="../data/"
+LOCAL_DATA_DIR="../data/images/"
 
-echo "--- Starting Fast Image Sync ---"
-echo "Local Source:  $LOCAL_DATA_DIR"
-echo "Remote Dest:   $PI_USER@$PI_HOST:$PI_DEST/data"
+echo "--- Starting Binary Asset Sync ---"
+echo "Target: $PI_USER@$PI_HOST:$PI_DEST/data/images/"
 
-# Ensure the destination directory exists
-ssh $PI_USER@$PI_HOST "mkdir -p $PI_DEST/data"
+ssh $PI_USER@$PI_HOST "mkdir -p $PI_DEST/data/images"
 
-# Sync command:
-# -a: Archive mode (preserves permissions/times)
-# -v: Verbose (shows files as they transfer)
-# -z: Compress (speeds up transfer over Wi-Fi)
-# -P: Shows progress bar for large transfers
-rsync -avzP --delete-during --bwlimit=1000 "$LOCAL_DATA_DIR" $PI_USER@$PI_HOST:"$PI_DEST/data"
+# Sync only .bin files and directories, deleting removed items on the destination
+rsync -avzP --delete-during \
+    --include="*/" \
+    --include="*.bin" \
+    --exclude="*" \
+    "$LOCAL_DATA_DIR" $PI_USER@$PI_HOST:"$PI_DEST/data/images/"
 
 echo "--- Sync Complete! ---"

@@ -10,8 +10,8 @@ import (
 var IsRaspberryPi bool
 
 func init() {
-	// Identify if we are running on a 32-bit ARM Linux environment (Raspberry Pi Zero 2 W)
-	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
+	// Identify if we are running on a 64-bit ARM Linux environment (Raspberry Pi OS on 64-bit hardware)
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
 		IsRaspberryPi = true
 	}
 }
@@ -45,15 +45,17 @@ const (
 
 const (
 	PinBackBtn    = 21
-	PinEncoderA   = 20
-	PinEncoderB   = 16
+	PinEncoderA   = 16
+	PinEncoderB   = 20
 	PinEncoderCen = 5
 	PinEncoderUp  = 19
 	PinEncoderDwn = 6
 	PinEncoderLft = 26
 	PinEncoderRgt = 13
+
+	PinDisplayCS  = 7
+	PinDisplayRST = 8
 	PinDisplayDC  = 9
-	PinDisplayRST = 27
 )
 
 const (

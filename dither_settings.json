@@ -1,0 +1,5 @@
+{
+  "brightness": 0,
+  "contrast": 1,
+  "method": "Floyd-Steinberg"
+}
