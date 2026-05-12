@@ -9,16 +9,19 @@ import (
 	"strings"
 
 	"momirbox/internal/config"
+	"momirbox/internal/converter"
 )
 
 // CardVersion represents the MTGJSON v5 schema for a card within a set.
 type CardVersion struct {
-	Name        string   `json:"name"`
-	FaceName    string   `json:"faceName"`
-	Layout      string   `json:"layout"`
-	Types       []string `json:"types"`
-	IsToken     bool     `json:"isToken"`
-	Identifiers struct {
+	Name         string   `json:"name"`
+	FaceName     string   `json:"faceName"`
+	Layout       string   `json:"layout"`
+	Types        []string `json:"types"`
+	IsToken      bool     `json:"isToken"`
+	FrameVersion string   `json:"frameVersion"`
+	Availability []string `json:"availability"`
+	Identifiers  struct {
 		ScryfallID string `json:"scryfallId"`
 	} `json:"identifiers"`
 	IsFunny    bool    `json:"isFunny"`
@@ -33,6 +36,7 @@ type LeanCreature struct {
 	Name       string
 	CMC        int
 	ScryfallID string
+	Frame      converter.FrameStyle
 }
 
 // TokenVersion represents the MTGJSON v5 schema for a token within a set.
@@ -50,6 +54,7 @@ type TokenVersion struct {
 	Side         string   `json:"side"`
 	IsOnlineOnly bool     `json:"isOnlineOnly"`
 	IsRebalanced bool     `json:"isRebalanced"`
+	Availability []string `json:"availability"`
 	Identifiers  struct {
 		ScryfallID string `json:"scryfallId"`
 	} `json:"identifiers"`
@@ -68,8 +73,12 @@ type LeanToken struct {
 
 // MTGSet represents the root object for a specific Magic set in a JSON stream.
 type MTGSet struct {
-	Cards  []CardVersion  `json:"cards"`
-	Tokens []TokenVersion `json:"tokens"`
+	Code             string         `json:"code"`
+	Name             string         `json:"name"`
+	Type             string         `json:"type"`
+	IsPartialPreview bool           `json:"isPartialPreview"`
+	Cards            []CardVersion  `json:"cards"`
+	Tokens           []TokenVersion `json:"tokens"`
 }
 
 // ParseAllPrintingsCreatures aggregates legal creatures from bulk and update files.
@@ -81,14 +90,16 @@ func ParseAllPrintingsCreatures(ctx context.Context) ([]LeanCreature, error) {
 		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
+	opts, _ := LoadParserOptions(ParserOptionsPath)
+
 	if err := streamBulkFile(ctx, allPrintingsPath, func(set MTGSet) {
-		processSet(set, creatureMap)
+		processSet(set, creatureMap, opts)
 	}); err != nil {
 		return nil, err
 	}
 
 	if err := processUpdates(ctx, func(set MTGSet) {
-		processSet(set, creatureMap)
+		processSet(set, creatureMap, opts)
 	}); err != nil {
 		return nil, err
 	}
@@ -109,14 +120,16 @@ func ParseAllPrintingsTokens(ctx context.Context) ([]LeanToken, error) {
 		return nil, fmt.Errorf("AllPrintings.json not found; update database first")
 	}
 
+	opts, _ := LoadParserOptions(ParserOptionsPath)
+
 	if err := streamBulkFile(ctx, allPrintingsPath, func(set MTGSet) {
-		processTokens(set, tokenMap)
+		processTokens(set, tokenMap, opts)
 	}); err != nil {
 		return nil, err
 	}
 
 	if err := processUpdates(ctx, func(set MTGSet) {
-		processTokens(set, tokenMap)
+		processTokens(set, tokenMap, opts)
 	}); err != nil {
 		return nil, err
 	}
@@ -128,7 +141,10 @@ func ParseAllPrintingsTokens(ctx context.Context) ([]LeanToken, error) {
 	return list, nil
 }
 
-func processSet(set MTGSet, creatureMap map[string]LeanCreature) {
+func processSet(set MTGSet, creatureMap map[string]LeanCreature, opts ParserOptions) {
+	if opts.skipSet(set) {
+		return
+	}
 	for _, card := range set.Cards {
 		if card.Layout == "token" || card.IsToken || contains(card.Types, "Token") {
 			continue
@@ -137,6 +153,9 @@ func processSet(set MTGSet, creatureMap map[string]LeanCreature) {
 			continue
 		}
 		if card.IsFunny || card.Identifiers.ScryfallID == "" {
+			continue
+		}
+		if !contains(card.Availability, "paper") {
 			continue
 		}
 
@@ -150,12 +169,16 @@ func processSet(set MTGSet, creatureMap map[string]LeanCreature) {
 				Name:       name,
 				CMC:        int(card.ManaValue),
 				ScryfallID: card.Identifiers.ScryfallID,
+				Frame:      converter.MapFrame(card.FrameVersion),
 			}
 		}
 	}
 }
 
-func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
+func processTokens(set MTGSet, tokenMap map[string]LeanToken, opts ParserOptions) {
+	if opts.skipSet(set) {
+		return
+	}
 	for _, token := range set.Tokens {
 		name := token.FaceName
 		if name == "" {
@@ -169,6 +192,9 @@ func processTokens(set MTGSet, tokenMap map[string]LeanToken) {
 			continue
 		}
 		if token.IsOnlineOnly || token.IsRebalanced || token.Identifiers.ScryfallID == "" {
+			continue
+		}
+		if !contains(token.Availability, "paper") {
 			continue
 		}
 

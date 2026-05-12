@@ -20,6 +20,7 @@ type MissingFile struct {
 	Dir        string
 	ScryfallID string
 	IsBackFace bool
+	Frame      converter.FrameStyle
 }
 
 func GetMissingCreatures(ctx context.Context) ([]MissingFile, error) {
@@ -39,6 +40,7 @@ func GetMissingCreatures(ctx context.Context) ([]MissingFile, error) {
 				Path:       filePath,
 				Dir:        cmcDir,
 				ScryfallID: card.ScryfallID,
+				Frame:      card.Frame,
 			})
 		}
 	}
@@ -64,6 +66,7 @@ func GetMissingTokens(ctx context.Context) ([]MissingFile, error) {
 				Dir:        saveDir,
 				ScryfallID: token.ScryfallID,
 				IsBackFace: token.IsBackFace,
+				Frame:      converter.Frame2015,
 			})
 		}
 	}
@@ -76,7 +79,7 @@ func DownloadAndConvert(client *http.Client, item MissingFile, settings converte
 		return false
 	}
 
-	targetURL := fmt.Sprintf("https://cards.scryfall.io/normal/front/%c/%c/%s.jpg", item.ScryfallID[0], item.ScryfallID[1], item.ScryfallID)
+	targetURL := fmt.Sprintf("https://cards.scryfall.io/large/front/%c/%c/%s.jpg", item.ScryfallID[0], item.ScryfallID[1], item.ScryfallID)
 
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
@@ -101,7 +104,11 @@ func DownloadAndConvert(client *http.Client, item MissingFile, settings converte
 
 	_ = os.MkdirAll(item.Dir, os.ModePerm)
 
-	ditheredGray := converter.DitherImage(img, config.PrinterWidth, settings, noiseImg)
+	frame := item.Frame
+	if frame == "" {
+		frame = converter.Frame2015
+	}
+	ditheredGray := converter.DitherImage(img, config.PrinterWidth, settings, frame, noiseImg)
 	binData := converter.ImageToESCPOS(ditheredGray)
 
 	tmpPath := item.Path + ".tmp"
