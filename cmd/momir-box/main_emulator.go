@@ -32,7 +32,7 @@ func runEmulator(themePath string) {
 
 	emulator := hardware.NewEmulator()
 	mockPrinter := hardware.NewMockPrinter()
-	app := ui.NewApp(emulator, emulator, mockPrinter)
+	app := ui.NewApp(emulator, emulator, nil, mockPrinter)
 
 	// App logic runs in the background so Ebitengine can own the main thread
 	go app.Run()
