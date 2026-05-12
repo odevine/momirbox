@@ -3,10 +3,14 @@
 # -----------------------------
 # Ignore the massive MTGJSON files and tracking states
 data/
+dither_tests/
 
 # -----------------------------
 # 3. Go Binaries & Build Files
 # -----------------------------
+momir-sync
+momir-sync.exe
+momir-sync.app
 momirbox
 momirbox.exe
 momirbox.app
