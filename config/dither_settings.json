@@ -1,0 +1,226 @@
+{
+  "test_output_dir": "dither_tests",
+  "test_show_region_borders": false,
+
+  "clahe_enabled": true,
+  "clahe_tiles_x": 16,
+  "clahe_tiles_y": 16,
+  "clahe_clip_limit": 2.5,
+  "clahe_regions": {
+    "1993": [
+      { "x_start": 0.105, "x_end": 0.895, "y_start": 0.09, "y_end": 0.548 }
+    ],
+    "1997": [
+      { "x_start": 0.115, "x_end": 0.885, "y_start": 0.1, "y_end": 0.545 }
+    ],
+    "2003": [
+      { "x_start": 0.08, "x_end": 0.92, "y_start": 0.115, "y_end": 0.559 }
+    ],
+    "2015": [
+      { "x_start": 0.08, "x_end": 0.92, "y_start": 0.115, "y_end": 0.559 }
+    ],
+    "future": [
+      { "x_start": 0.08, "x_end": 0.95, "y_start": 0.12, "y_end": 0.553 }
+    ]
+  },
+
+  "sauvola_enabled": true,
+  "sauvola_window": 25,
+  "sauvola_k": 0,
+  "sauvola_regions": {
+    "1993": [
+      {
+        "k": 0.65,
+        "x_start": 0.075,
+        "x_end": 0.93,
+        "y_start": 0.036,
+        "y_end": 0.0845,
+        "background_alpha": 1,
+        "halo_radius": 2,
+        "white_text": true
+      },
+      {
+        "k": 0.65,
+        "x_start": 0.075,
+        "x_end": 0.925,
+        "y_start": 0.555,
+        "y_end": 0.6,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      },
+      {
+        "k": 0.4,
+        "x_start": 0.11,
+        "x_end": 0.89,
+        "y_start": 0.6,
+        "y_end": 0.896,
+        "background_alpha": 0.04
+      },
+      {
+        "k": 0.5,
+        "x_start": 0.775,
+        "x_end": 0.94,
+        "y_start": 0.896,
+        "y_end": 0.95,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      }
+    ],
+    "1997": [
+      {
+        "k": 0.65,
+        "x_start": 0.105,
+        "x_end": 0.94,
+        "y_start": 0.042,
+        "y_end": 0.095,
+        "background_alpha": 1,
+        "halo_radius": 2,
+        "white_text": true
+      },
+      {
+        "k": 0.65,
+        "x_start": 0.1,
+        "x_end": 0.92,
+        "y_start": 0.552,
+        "y_end": 0.596,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      },
+      {
+        "k": 0.4,
+        "x_start": 0.11,
+        "x_end": 0.89,
+        "y_start": 0.6,
+        "y_end": 0.89,
+        "background_alpha": 0.04
+      },
+      {
+        "k": 0.5,
+        "x_start": 0.775,
+        "x_end": 0.94,
+        "y_start": 0.896,
+        "y_end": 0.95,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      }
+    ],
+    "2003": [
+      {
+        "k": 0.65,
+        "x_start": 0.08,
+        "x_end": 0.92,
+        "y_start": 0.055,
+        "y_end": 0.107,
+        "background_alpha": 1,
+        "halo_radius": 2
+      },
+      {
+        "k": 0.65,
+        "x_start": 0.09,
+        "x_end": 0.92,
+        "y_start": 0.568,
+        "y_end": 0.614,
+        "halo_radius": 2,
+        "background_alpha": 1
+      },
+      {
+        "k": 0.4,
+        "x_start": 0.075,
+        "x_end": 0.91,
+        "y_start": 0.627,
+        "y_end": 0.89,
+        "background_alpha": 0.04
+      },
+      {
+        "k": 0.4,
+        "x_start": 0.075,
+        "x_end": 0.74,
+        "y_start": 0.89,
+        "y_end": 0.905,
+        "background_alpha": 0
+      },
+      {
+        "k": 0.5,
+        "x_start": 0.76,
+        "x_end": 0.91,
+        "y_start": 0.9,
+        "y_end": 0.945,
+        "halo_radius": 2,
+        "background_alpha": 1
+      }
+    ],
+    "2015": [
+      {
+        "k": 0.65,
+        "x_start": 0.075,
+        "x_end": 0.93,
+        "y_start": 0.052,
+        "y_end": 0.098,
+        "background_alpha": 1,
+        "halo_radius": 2
+      },
+      {
+        "k": 0.65,
+        "x_start": 0.075,
+        "x_end": 0.925,
+        "y_start": 0.568,
+        "y_end": 0.615,
+        "halo_radius": 2,
+        "background_alpha": 1
+      },
+      {
+        "k": 0.5,
+        "x_start": 0.8,
+        "x_end": 0.92,
+        "y_start": 0.9,
+        "y_end": 0.945,
+        "halo_radius": 2,
+        "background_alpha": 1
+      }
+    ],
+    "future": [
+      {
+        "k": 0.65,
+        "x_start": 0.17,
+        "x_end": 0.93,
+        "y_start": 0.052,
+        "y_end": 0.11,
+        "background_alpha": 1,
+        "halo_radius": 2,
+        "white_text": true
+      },
+      {
+        "k": 0.65,
+        "x_start": 0.12,
+        "x_end": 0.87,
+        "y_start": 0.568,
+        "y_end": 0.615,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      },
+      {
+        "k": 0.4,
+        "x_start": 0.08,
+        "x_end": 0.93,
+        "y_start": 0.627,
+        "y_end": 0.89,
+        "background_alpha": 0.1
+      },
+      {
+        "k": 0.5,
+        "x_start": 0.78,
+        "x_end": 0.9,
+        "y_start": 0.895,
+        "y_end": 0.945,
+        "halo_radius": 2,
+        "background_alpha": 1,
+        "white_text": true
+      }
+    ]
+  }
+}
