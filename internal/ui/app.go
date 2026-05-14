@@ -2,178 +2,135 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"os/exec"
 	"sync"
 	"time"
 
+	"momirbox/internal/config"
 	"momirbox/internal/hardware"
+	"momirbox/internal/ui/widget"
 )
 
-// AppState represents the primary view modes for the UI.
-type AppState int
-
-const (
-	StateSplash AppState = iota
-	StateMenu
-	StateGambling
-)
-
-// App manages the global state, input handling, and navigation of the MomirBox.
+// App is the thin host that owns the Dispatcher, runs the input/render loop,
+// and polls the UPS so the home view can read its state.
 type App struct {
 	display hardware.Display
 	input   hardware.Input
 	ups     *hardware.UPS
 	Printer hardware.Printer
 
-	currentState AppState
-	visualIndex  float64
-	IsEditing    bool
-	menuStack    []*Menu
-	indexStack   []int
-	currentMenu  *Menu
-	currentIndex int
+	dispatcher *Dispatcher
+	frame      *image.RGBA
+	canvas     *widget.Canvas
 
 	quitChan chan struct{}
-	renderMu sync.Mutex
 
 	batteryPct float64
 	isCharging bool
 	batteryMu  sync.Mutex
 }
 
-// NewApp creates and initializes a new App instance with the provided hardware interfaces.
 func NewApp(d hardware.Display, i hardware.Input, u *hardware.UPS, p hardware.Printer) *App {
+	frame := image.NewRGBA(image.Rect(0, 0, config.ScreenWidth, config.ScreenHeight))
 	return &App{
-		display:      d,
-		input:        i,
-		ups:          u,
-		Printer:      p,
-		currentState: StateSplash,
-		IsEditing:    false,
-		quitChan:     make(chan struct{}),
+		display:    d,
+		input:      i,
+		ups:        u,
+		Printer:    p,
+		dispatcher: NewDispatcher(),
+		frame:      frame,
+		canvas:     widget.NewCanvas(frame),
+		quitChan:   make(chan struct{}),
 	}
 }
 
-// Run starts the main application loop for the UI.
 func (app *App) Run() {
-	app.renderSplash()
-	time.Sleep(3 * time.Second)
+	app.startBatteryPoller()
 
-	// Start the background battery poller for the toolbar
-	if app.ups != nil {
-		// Do an initial read so it isn't 0% for the first 5 seconds
-		pct, _ := app.ups.GetBatteryPercentage()
-		charging, _ := app.ups.IsCharging()
+	// Splash -> Home. The splash auto-completes after its duration and
+	// Replaces itself with the home scene.
+	app.dispatcher.Push(widget.NewSplashView("momir_splash.png", 3*time.Second, func() {
+		app.dispatcher.Replace(buildHomeScene(app), widget.Instant{})
+	}), widget.Instant{})
 
-		app.batteryMu.Lock()
-		app.batteryPct = pct
-		app.isCharging = charging
-		app.batteryMu.Unlock()
-
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					newPct, _ := app.ups.GetBatteryPercentage()
-					newCharging, _ := app.ups.IsCharging()
-
-					app.batteryMu.Lock()
-					app.batteryPct = newPct
-					app.isCharging = newCharging
-					app.batteryMu.Unlock()
-				case <-app.quitChan:
-					return
-				}
-			}
-		}()
-	}
-
-	app.currentMenu = BuildMenuTree(app.ups)
-	app.currentState = StateMenu
-
+	last := time.Now()
+	lastInputAt := time.Now()
 	for {
 		select {
 		case <-app.quitChan:
 			fmt.Println("Shutting down UI loop...")
 			return
-
 		default:
-			action := app.input.Poll()
-			if action != hardware.InputNone {
-				app.handleInput(action)
-			}
-
-			if app.currentState == StateMenu {
-				app.renderMenu()
-			}
-
-			time.Sleep(16 * time.Millisecond)
 		}
-	}
-}
 
-// handleInput translates hardware actions into menu navigation or function calls.
-func (app *App) handleInput(action hardware.InputAction) {
-	if app.currentState != StateMenu {
-		return
-	}
+		now := time.Now()
+		dt := now.Sub(last)
+		last = now
 
-	item := app.currentMenu.Items[app.currentIndex]
-	switch action {
-	case hardware.InputRight:
-		if app.IsEditing && item.Adjust != nil {
-			item.Adjust(app, 1)
+		timeout := time.Duration(config.CurrentPrefs.ScreenTimeoutSec) * time.Second
+		asleep := timeout > 0 && now.Sub(lastInputAt) > timeout
+
+		if action := app.input.Poll(); action != hardware.InputNone {
+			// The first input after sleep wakes the screen but is not
+			// delivered, so the user can't accidentally activate anything.
+			if !asleep {
+				app.dispatcher.HandleInput(action)
+			}
+			lastInputAt = time.Now()
+			asleep = false
+		}
+
+		if asleep {
+			app.canvas.Clear(widget.ColorBlack)
 		} else {
-			app.currentIndex = (app.currentIndex + 1) % len(app.currentMenu.Items)
+			app.dispatcher.Render(app.canvas, dt)
 		}
-	case hardware.InputLeft:
-		if app.IsEditing && item.Adjust != nil {
-			item.Adjust(app, -1)
-		} else {
-			app.currentIndex--
-			if app.currentIndex < 0 {
-				app.currentIndex = len(app.currentMenu.Items) - 1
-			}
-		}
-	case hardware.InputSelect:
-		if item.Adjust != nil && !item.IsReadOnly {
-			app.IsEditing = !app.IsEditing
-		} else if item.Submenu != nil {
-			app.menuStack = append(app.menuStack, app.currentMenu)
-			app.indexStack = append(app.indexStack, app.currentIndex)
-			app.currentMenu = item.Submenu
-			app.currentIndex = 0
-			app.IsEditing = false
-		} else if item.Action != nil {
-			item.Action(app)
-		}
-	case hardware.InputBack:
-		if app.IsEditing {
-			app.IsEditing = false
-		} else if len(app.menuStack) > 0 {
-			lastIdx := len(app.menuStack) - 1
-			app.currentMenu = app.menuStack[lastIdx]
-			app.currentIndex = app.indexStack[lastIdx]
-			app.menuStack = app.menuStack[:lastIdx]
-			app.indexStack = app.indexStack[:lastIdx]
-		}
+		app.display.DrawFrame(app.frame)
+
+		time.Sleep(config.FrameDelay)
 	}
 }
 
 func (app *App) Quit() {
 	select {
-	case <-app.quitChan: // Already closed
+	case <-app.quitChan:
 	default:
 		close(app.quitChan)
 	}
 }
 
-// PowerOff physically shuts down the Raspberry Pi.
+// PowerOff halts the UI loop and shuts down the Pi.
 func (app *App) PowerOff() {
-	app.Quit() // Stop the UI loop first so the screen clears
-
-	// Execute the Linux shutdown command
+	app.Quit()
 	_ = exec.Command("sudo", "shutdown", "-h", "now").Run()
+}
+
+func (app *App) startBatteryPoller() {
+	if app.ups == nil {
+		return
+	}
+
+	poll := func() {
+		pct, _ := app.ups.GetBatteryPercentage()
+		charging, _ := app.ups.IsCharging()
+		app.batteryMu.Lock()
+		app.batteryPct = pct
+		app.isCharging = charging
+		app.batteryMu.Unlock()
+	}
+	poll()
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				poll()
+			case <-app.quitChan:
+				return
+			}
+		}
+	}()
 }

@@ -8,9 +8,10 @@ import (
 )
 
 type Preferences struct {
-	EnableTokens  bool    `json:"enable_tokens"`
-	IncludeUnsets bool    `json:"include_unsets"`
-	AnimSpeed     float64 `json:"anim_speed"`
+	EnableTokens     bool    `json:"enable_tokens"`
+	IncludeUnsets    bool    `json:"include_unsets"`
+	AnimSpeed        float64 `json:"anim_speed"`
+	ScreenTimeoutSec int     `json:"screen_timeout_sec"` // 0 = never
 }
 
 var CurrentPrefs Preferences
@@ -18,9 +19,10 @@ var CurrentPrefs Preferences
 // InitPrefs loads user settings from disk or falls back to defaults
 func InitPrefs() {
 	CurrentPrefs = Preferences{
-		EnableTokens:  false,
-		IncludeUnsets: false,
-		AnimSpeed:     0.15,
+		EnableTokens:     false,
+		IncludeUnsets:    false,
+		AnimSpeed:        0.15,
+		ScreenTimeoutSec: 30,
 	}
 
 	if _, err := os.Stat(PrefsFile); err == nil {
@@ -56,5 +58,18 @@ func ToggleTokens() {
 
 func ToggleUnsets() {
 	CurrentPrefs.IncludeUnsets = !CurrentPrefs.IncludeUnsets
+	SavePrefs()
+}
+
+// SetScreenTimeout clamps the requested seconds to [0, 300] and persists.
+// 0 disables the timeout entirely.
+func SetScreenTimeout(sec int) {
+	if sec < 0 {
+		sec = 0
+	}
+	if sec > 300 {
+		sec = 300
+	}
+	CurrentPrefs.ScreenTimeoutSec = sec
 	SavePrefs()
 }

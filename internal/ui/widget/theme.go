@@ -1,4 +1,4 @@
-package ui
+package widget
 
 import (
 	"encoding/json"

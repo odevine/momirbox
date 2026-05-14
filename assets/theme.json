@@ -20,8 +20,8 @@
 
   "CarouselItemSpacing": 40,
   "CarouselIconSize": 24,
-  "CarouselIconY": 24,
-  "CarouselTextY": 56,
+  "CarouselIconY": 18,
+  "CarouselTextY": 54,
 
   "StatusRow1Y": 28,
   "StatusRow2Y": 40,
